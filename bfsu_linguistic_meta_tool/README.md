@@ -1,8 +1,21 @@
-# Linguistic Metadata Tool / 语言学语料库元信息制作工具
+# Linguistic Metadata Tool / 语言学语料库元信息制作工具 v1.0
 
 A cross-platform Python desktop application for creating, editing, importing, exporting and managing metadata for linguistic corpora, corpus construction projects and corpus translation studies.
 
 本工具面向语言学研究者，核心工作流为：**项目文件管理 → 元信息规范 Schema 管理 → 元信息记录 Records 编辑 → Excel/XML 导入 → XML统一保存与导出**。
+
+## 0. Windows Executable Package with GUI / Windows x64 图形界面可执行程序
+
+The Windows x64 executable package with GUI can be downloaded from Baidu Netdisk.
+
+Windows x64 图形界面可执行程序可通过百度网盘下载。
+
+File / 文件名： bfsu_linguistic_meta_tool.zip
+
+Download Link / 下载链接：
+https://pan.baidu.com/s/1o_s_IJDF_xEKCuYAjJxfZg
+
+Extraction Code / 提取码： vvmy
 
 ## 1. Main Features / 主要功能
 
@@ -194,3 +207,4 @@ Contact / 联系方式: djliu@bfsu.edu.cn
 Copyright © 2026 Dingjia LIU. All rights reserved.
 
 ChatGPT 5.5 contributed to the development process by assisting with code generation, feature iteration, interaction logic refinement, and documentation polishing. The overall design, research orientation, functional decisions, testing confirmation, and final responsibility remain with the developer.
+
