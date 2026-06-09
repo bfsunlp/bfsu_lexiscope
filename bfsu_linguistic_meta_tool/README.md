@@ -17,7 +17,7 @@ https://pan.baidu.com/s/1o_s_IJDF_xEKCuYAjJxfZg
 
 Extraction Code / 提取码： vvmy
 
-<img width="1140" height="1140" alt="Download" src="https://github.com/user-attachments/assets/f851e40e-98f4-47e2-9e68-41f85096d0c0" />
+<img width="320" height="320" alt="Download" src="https://github.com/user-attachments/assets/f851e40e-98f4-47e2-9e68-41f85096d0c0" />
 
 ## 1. Main Features / 主要功能
 
