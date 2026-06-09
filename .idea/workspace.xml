@@ -1,7 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="34ff85da-63cc-4dbe-8764-803be87cc5ca" name="更改" comment="" />
+    <list default="true" id="34ff85da-63cc-4dbe-8764-803be87cc5ca" name="更改" comment="The first version of bfsu_meta_tool">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/assets/app.png" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/assets/app.png" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/bfsu_meta_tool.spec" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/bfsu_meta_tool.spec" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/controllers.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/controllers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/excel_importer.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/excel_importer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/i18n.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/i18n.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema/bilingual_parallel_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/bilingual_parallel_schema.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema/default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/default.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema/learner_corpus_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/learner_corpus_schema.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema/monolingual_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/monolingual_schema.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema/multilingual_parallel_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/multilingual_parallel_schema.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema/multiple_translations_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/multiple_translations_schema.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema/spoken_corpus_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/spoken_corpus_schema.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/schema_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema_manager.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/validators.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/validators.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/views/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/views/import_dialogs.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/import_dialogs.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/views/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/main_window.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/views/record_editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/record_editor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/views/schema_editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/schema_editor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/xml_importer.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/xml_importer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_meta_tool/xml_repository.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/xml_repository.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -10,6 +39,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "bfsunlp"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/bfsunlp/bfsu_lexiscope.git",
+    "accountId": "952281e4-d80d-41c9-8e28-986f4fbfdc1f"
+  }
+}]]></component>
   <component name="ProjectColorInfo"><![CDATA[{
   "associatedIndex": 3
 }]]></component>
@@ -20,10 +61,15 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "ASKED_SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "Python.main.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "git-widget-placeholder": "master",
+    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -73,8 +119,46 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1780973235019</updated>
-      <workItem from="1780973236079" duration="4000" />
+      <workItem from="1780973236079" duration="1641000" />
     </task>
+    <task id="LOCAL-00001" summary="The first version of bfsu_meta_tool">
+      <option name="closed" value="true" />
+      <created>1780973391617</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1780973391617</updated>
+    </task>
+    <task id="LOCAL-00002" summary="The first version of bfsu_meta_tool">
+      <option name="closed" value="true" />
+      <created>1780973435099</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1780973435099</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="The first version of bfsu_meta_tool" />
+    <option name="LAST_COMMIT_MESSAGE" value="The first version of bfsu_meta_tool" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/main.py</url>
+          <line>8</line>
+          <option name="timeStamp" value="1" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/bfsu_lexiscope$main.coverage" NAME="main 覆盖结果" MODIFIED="1780973264906" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_meta_tool" />
   </component>
 </project>
