@@ -78,7 +78,13 @@ class MainWindow:
         self.notebook.add(self.schema_tab, text="Schema")
 
         self._build_records_table()
-        self.record_editor = RecordEditor(self.record_edit_tab, self.i18n, on_change=self._mark_changed, on_validate=self.show_validation_messages)
+        self.record_editor = RecordEditor(
+            self.record_edit_tab,
+            self.i18n,
+            on_change=self._mark_changed,
+            on_validate=self.show_validation_messages,
+            on_auto_fill=lambda: self.controller and self.controller.recognize_metadata_for_current_record(),
+        )
         self.record_editor.pack(fill="both", expand=True)
         self.schema_editor = SchemaEditor(self.schema_tab, self.i18n, on_change=self._mark_changed)
         self.schema_editor.pack(fill="both", expand=True)
@@ -144,9 +150,13 @@ class MainWindow:
 
         schema_menu = tk.Menu(self.menu_bar, tearoff=False)
         schema_menu.add_command(label=self.i18n.t("new_schema"), command=c.new_schema if c else None, state=active_state)
+        schema_menu.add_command(label=self.i18n.t("ai_generate_new_schema"), command=lambda: c.design_schema_with_ai("generate_new_schema") if c else None, state=active_state)
+        schema_menu.add_command(label=self.i18n.t("ai_extend_current_schema"), command=lambda: c.design_schema_with_ai("extend_current_schema") if c else None, state=active_state)
+        schema_menu.add_separator()
         schema_menu.add_command(label=self.i18n.t("edit_schema"), command=lambda: self.notebook.select(self.schema_tab), state=active_state)
         schema_menu.add_command(label=self.i18n.t("import_schema"), command=c.import_schema if c else None, state=active_state)
         schema_menu.add_command(label=self.i18n.t("export_schema"), command=c.export_schema if c else None, state=active_state)
+        schema_menu.add_command(label=self.i18n.t("save_schema_to_library"), command=c.save_schema_to_library if c else None, state=active_state)
         schema_menu.add_command(label=self.i18n.t("validate_schema"), command=c.validate_schema if c else None, state=active_state)
         self.menu_bar.add_cascade(label=self.i18n.t("schema"), menu=schema_menu, state=active_state)
 
@@ -161,6 +171,10 @@ class MainWindow:
         lang_menu.add_command(label="中文", command=lambda: c.change_language("zh_CN") if c else None)
         lang_menu.add_command(label="English", command=lambda: c.change_language("en_US") if c else None)
         self.menu_bar.add_cascade(label=self.i18n.t("language"), menu=lang_menu)
+
+        settings_menu = tk.Menu(self.menu_bar, tearoff=False)
+        settings_menu.add_command(label=self.i18n.t("chatgpt_api_key"), command=c.open_ai_settings if c else None)
+        self.menu_bar.add_cascade(label=self.i18n.t("settings"), menu=settings_menu)
 
         view_menu = tk.Menu(self.menu_bar, tearoff=False)
         view_menu.add_command(label=self.i18n.t("maximize"), command=self.maximize)

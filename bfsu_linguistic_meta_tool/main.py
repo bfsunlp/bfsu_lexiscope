@@ -57,7 +57,7 @@ def main() -> None:
     except tk.TclError:
         pass
 
-    i18n = I18N("zh_CN")
+    i18n = I18N("en_US")
     window = MainWindow(root, i18n)
     MetadataController(root, window, i18n)
     center_window(root)

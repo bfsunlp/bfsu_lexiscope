@@ -13,11 +13,12 @@ from validators import validate_record
 class RecordEditor(ttk.Frame):
     """Dynamic record editor generated from the active schema."""
 
-    def __init__(self, master: tk.Misc, i18n: I18N, on_change=None, on_validate=None) -> None:
+    def __init__(self, master: tk.Misc, i18n: I18N, on_change=None, on_validate=None, on_auto_fill=None) -> None:
         super().__init__(master)
         self.i18n = i18n
         self.on_change = on_change
         self.on_validate = on_validate
+        self.on_auto_fill = on_auto_fill
         self.project: MetadataProject | None = None
         self.current_record: MetadataRecord | None = None
         self.inputs: dict[str, object] = {}
@@ -32,8 +33,10 @@ class RecordEditor(ttk.Frame):
         toolbar.grid(row=0, column=0, sticky="ew", padx=4, pady=4)
         self.save_btn = ttk.Button(toolbar, command=self.save_current)
         self.validate_btn = ttk.Button(toolbar, command=self.validate_current)
+        self.ai_fill_btn = ttk.Button(toolbar, command=self.auto_fill_metadata)
         self.save_btn.pack(side="left", padx=2)
         self.validate_btn.pack(side="left", padx=2)
+        self.ai_fill_btn.pack(side="left", padx=10)
 
         container = ttk.Frame(self)
         container.grid(row=1, column=0, sticky="nsew")
@@ -56,6 +59,7 @@ class RecordEditor(ttk.Frame):
         state = "normal" if enabled else "disabled"
         self.save_btn.configure(state=state)
         self.validate_btn.configure(state=state)
+        self.ai_fill_btn.configure(state=state)
         self._set_children_state(self.form_frame, enabled)
 
     def _set_children_state(self, widget: tk.Widget, enabled: bool) -> None:
@@ -77,6 +81,7 @@ class RecordEditor(ttk.Frame):
     def refresh_language(self) -> None:
         self.save_btn.configure(text=self.i18n.t("save_record"))
         self.validate_btn.configure(text=self.i18n.t("validate"))
+        self.ai_fill_btn.configure(text=self.i18n.t("ai_extract_metadata"))
 
     def load_project(self, project: MetadataProject) -> None:
         self.project = project
@@ -135,6 +140,12 @@ class RecordEditor(ttk.Frame):
                 ttk.Label(self.form_frame, text=desc, foreground="#666666", wraplength=520).grid(row=row + 1, column=1, sticky="w", padx=8, pady=(0, 4))
                 row += 1
             row += 1
+
+
+    def auto_fill_metadata(self) -> None:
+        """Open the optional ChatGPT-assisted metadata extraction workflow."""
+        if self.on_auto_fill:
+            self.on_auto_fill()
 
     def save_current(self) -> MetadataRecord | None:
         if not self.project or not self.enabled:

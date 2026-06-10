@@ -1,4 +1,4 @@
-# Linguistic Metadata Tool / 语言学语料库元信息制作工具 v1.0
+# Linguistic Metadata Tool / 语言学语料库元信息制作工具 v2.0
 
 A cross-platform Python desktop application for creating, editing, importing, exporting and managing metadata for linguistic corpora, corpus construction projects and corpus translation studies.
 
@@ -70,7 +70,7 @@ cd linguistic_metadata_tool
 pip install -r requirements.txt
 ```
 
-`openpyxl` is used for Excel import/export. If it is not installed, the program still starts, but Excel import/export will show a clear error message.
+`openpyxl is used for Excel import/export; pypdf is used for local PDF text extraction; openai is used for optional AI-assisted metadata and Schema functions. If an optional dependency is missing, the related function will show a clear error message.
 
 ## 4. Run / 运行
 
@@ -81,6 +81,11 @@ python main.py
 ## 5. Typical Workflow / 基本使用流程
 
 ### 5.1 Create a Project / 新建项目
+
+Schema files are loaded from the application-level `Schema/` folder at startup. System defaults and user-created Schema XML files should both be kept in this folder so that they appear directly in the new-project dialog.
+
+程序启动时会从应用级 `Schema/` 文件夹读取 Schema。系统默认 Schema 与用户新增 Schema 均应保存在该文件夹中，这样在新建项目时可以直接选用。
+
 
 1. Open the program.
 2. Choose **File → New Project**.
@@ -145,6 +150,15 @@ python main.py
 
 Choose **File → Close Project** to close the current project. If the project contains unsaved changes, the program asks whether to save before closing.
 
+
+### 5.8 AI-assisted Metadata Extraction and Schema Design / 大模型辅助元信息识别与Schema设计
+
+1. Choose **Settings → ChatGPT API Key** to configure the optional API key, model name and API base URL. The key is stored only in the local user settings file and is not written into project XML.
+2. In **Record Editor**, click **Upload/Paste Document to Extract Metadata** to extract metadata from text files, PDF files, screenshots/images, pasted text, webpages or HTML files. The extraction is strictly bound to the current project Schema and is applied only after user review.
+3. Choose **Schema → AI-generate New Schema** to ask the model to draft a complete new Schema from user requirements and optional sample material. The result is shown as a field table before application.
+4. Choose **Schema → AI-extend Current Schema** to ask the model to propose additional fields for the current Schema. Existing field definitions are not replaced unless the user explicitly enables replacement in the dialog.
+5. See `docs/LLM_METADATA_PROMPT.md` for the internal JSON input/output contracts for both record extraction and Schema generation.
+
 ## 6. Unified XML Format / 统一XML结构
 
 The project XML uses this general structure:
@@ -208,3 +222,41 @@ Copyright © 2026 Dingjia LIU. All rights reserved.
 
 ChatGPT 5.5 contributed to the development process by assisting with code generation, feature iteration, interaction logic refinement, and documentation polishing. The overall design, research orientation, functional decisions, testing confirmation, and final responsibility remain with the developer.
 
+
+## 10. Optional ChatGPT-assisted Metadata Extraction / 可选的大模型元信息自动识别
+
+This updated version adds an optional LLM-assisted metadata extraction workflow. It does not change the main project workflow and does not force users to enable AI functions.
+
+本更新版本增加了一个可选的大模型元信息识别流程，不改变原有主界面和项目工作流，也不会强制用户启用 AI 功能。
+
+### 10.1 Set API Key / 设置 API Key
+
+Open **Settings → ChatGPT API Key** and set:
+
+- API Key
+- Model name, default: `gpt-5.4-mini-2026-03-17`
+- API Base URL, default: `https://api.openai.com/v1`
+- Maximum source text characters
+
+The API key is stored only in a local user settings file and is not written into project XML.
+
+打开 **设置 → ChatGPT API Key**，可设置 API Key、模型名称、API Base URL 和最大文本长度。API Key 仅保存在本机用户设置文件中，不写入项目 XML。
+
+### 10.2 Extract Metadata in Record Editor / 在编辑记录页面识别元信息
+
+After a project is opened and a record is selected or created, open the **Record Editor** tab and click **Upload/Paste Document to Extract Metadata** / **上传/粘贴文档识别元信息**.
+
+Supported inputs:
+
+- Text files: `.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.xml`
+- PDF files: `.pdf`
+- Screenshot/image files: `.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`, `.gif`, `.tif`, `.tiff`
+- HTML files: `.html`, `.htm`
+- Pasted text
+- Webpage URL: `http://` or `https://`
+
+The extraction is strictly bound to the active project Schema. The model is asked to return JSON only, using only field IDs already defined in the current Schema. The program validates and normalizes the returned JSON before applying it to the current record.
+
+### 10.3 Prompt and JSON Contract / Prompt 与 JSON 输入输出格式
+
+See `docs/LLM_METADATA_PROMPT.md` for the internal prompt contract and JSON input/output examples.

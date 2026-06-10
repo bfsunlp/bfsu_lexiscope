@@ -10,89 +10,200 @@ from models import MetadataField, MetadataSchema
 from utils import parse_bool, slugify
 
 
-BASE_FIELDS = [
-    MetadataField("corpus_id", "语料库编号", "Corpus ID", "corpus_id", "string", True, False, level="corpus", order=1),
-    MetadataField("corpus_name", "语料库名称", "Corpus Name", "corpus_name", "string", True, False, level="corpus", order=2),
-    MetadataField("corpus_type", "语料库类型", "Corpus Type", "corpus_type", "enum", True, False, controlled_values=["monolingual", "bilingual_parallel", "multilingual_parallel", "multiple_translations", "comparable", "learner", "spoken"], level="corpus", order=3),
-    MetadataField("text_id", "文本编号", "Text ID", "text_id", "string", True, False, level="text", order=4),
-    MetadataField("title", "标题", "Title", "title", "string", True, False, level="text", order=5),
-    MetadataField("author", "作者", "Author", "author", "string", False, True, level="text", order=6),
-    MetadataField("translator", "译者", "Translator", "translator", "string", False, True, level="version", order=7),
-    MetadataField("source_language", "源语", "Source Language", "source_language", "language_code", False, False, level="text", order=8),
-    MetadataField("target_language", "目标语", "Target Language", "target_language", "language_code", False, False, level="version", order=9),
-    MetadataField("language", "语种", "Language", "language", "language_code", False, False, level="text", order=10),
-    MetadataField("publication_year", "出版年份", "Publication Year", "publication_year", "year", False, False, level="text", order=11),
-    MetadataField("original_publication_year", "原文出版年份", "Original Publication Year", "original_publication_year", "year", False, False, level="text", order=12),
-    MetadataField("translated_publication_year", "译文出版年份", "Translated Publication Year", "translated_publication_year", "year", False, False, level="version", order=13),
-    MetadataField("publisher", "出版社", "Publisher", "publisher", "string", False, False, level="text", order=14),
-    MetadataField("genre", "文类", "Genre", "genre", "enum", False, False, controlled_values=["fiction", "news", "academic", "spoken", "legal", "educational", "other"], level="text", order=15),
-    MetadataField("text_type", "体裁/文本类型", "Text Type", "text_type", "string", False, False, level="text", order=16),
-    MetadataField("word_count", "词数", "Word Count", "word_count", "integer", False, False, level="text", order=17),
-    MetadataField("character_count", "字数", "Character Count", "character_count", "integer", False, False, level="text", order=18),
-    MetadataField("source_file", "源文件", "Source File", "source_file", "file_path", False, False, level="file", order=19),
-    MetadataField("copyright_status", "版权状态", "Copyright Status", "copyright_status", "enum", False, False, controlled_values=["unknown", "public_domain", "licensed", "permission_required", "restricted"], level="text", order=20),
-    MetadataField("notes", "备注", "Notes", "notes", "long_text", False, False, level="text", order=21),
+CORPUS_TYPE_VALUES = [
+    "monolingual",
+    "bilingual_parallel",
+    "multilingual_parallel",
+    "multiple_translations",
+    "comparable",
+    "learner",
+    "spoken",
 ]
+
+GENRE_VALUES = ["fiction", "news", "academic", "spoken", "legal", "educational", "other"]
+COPYRIGHT_VALUES = ["unknown", "public_domain", "licensed", "permission_required", "restricted"]
+ALIGNMENT_VALUES = ["text", "paragraph", "sentence", "segment", "word"]
+CEFR_VALUES = ["A1", "A2", "B1", "B2", "C1", "C2", "unknown"]
+GENDER_VALUES = ["unknown", "female", "male", "other", "not_disclosed"]
+
+
+def _field(
+    field_id: str,
+    zh: str,
+    en: str,
+    data_type: str = "string",
+    required: bool = False,
+    repeatable: bool = False,
+    *,
+    controlled_values: list[str] | None = None,
+    level: str = "text",
+    sensitive: bool = False,
+    description_zh: str = "",
+    description_en: str = "",
+    example: str = "",
+    validation_rule: str = "",
+) -> MetadataField:
+    return MetadataField(
+        field_id=field_id,
+        label_zh=zh,
+        label_en=en,
+        xml_tag=field_id,
+        data_type=data_type,
+        required=required,
+        repeatable=repeatable,
+        controlled_values=controlled_values or [],
+        level=level,
+        sensitive=sensitive,
+        description_zh=description_zh,
+        description_en=description_en,
+        example=example,
+        validation_rule=validation_rule,
+    )
+
+
+def _corpus_fields(corpus_type: str) -> list[MetadataField]:
+    return [
+        _field("corpus_id", "语料库编号", "Corpus ID", required=True, level="corpus"),
+        _field("corpus_name", "语料库名称", "Corpus Name", required=True, level="corpus"),
+        _field("corpus_type", "语料库类型", "Corpus Type", "enum", True, False, controlled_values=CORPUS_TYPE_VALUES, level="corpus", example=corpus_type),
+    ]
+
+
+def _common_text_fields(*, include_language: bool = True) -> list[MetadataField]:
+    fields = [
+        _field("text_id", "文本编号", "Text ID", required=True, level="text"),
+        _field("title", "标题", "Title", required=True, level="text"),
+        _field("author", "作者", "Author", repeatable=True, level="text"),
+    ]
+    if include_language:
+        fields.append(_field("language", "语种", "Language", "language_code", level="text", example="zh"))
+    fields.extend(
+        [
+            _field("publication_year", "出版年份", "Publication Year", "year", level="text", validation_rule=r"\d{4}"),
+            _field("publisher", "出版社", "Publisher", level="text"),
+            _field("genre", "文类", "Genre", "enum", controlled_values=GENRE_VALUES, level="text"),
+            _field("text_type", "体裁/文本类型", "Text Type", level="text"),
+            _field("word_count", "词数", "Word Count", "integer", level="text"),
+            _field("character_count", "字数", "Character Count", "integer", level="text"),
+            _field("source_file", "源文件", "Source File", "file_path", level="file"),
+            _field("copyright_status", "版权状态", "Copyright Status", "enum", controlled_values=COPYRIGHT_VALUES, level="text"),
+            _field("notes", "备注", "Notes", "long_text", level="text"),
+        ]
+    )
+    return fields
+
+
+def _translation_core_fields() -> list[MetadataField]:
+    return [
+        _field("source_language", "源语", "Source Language", "language_code", level="text", example="en"),
+        _field("target_language", "目标语", "Target Language", "language_code", level="version", example="zh"),
+        _field("translator", "译者", "Translator", repeatable=True, level="version"),
+        _field("original_title", "原文标题", "Original Title", level="text"),
+        _field("original_author", "原作者", "Original Author", repeatable=True, level="text"),
+        _field("original_publication_year", "原文出版年份", "Original Publication Year", "year", level="text", validation_rule=r"\d{4}"),
+        _field("translated_title", "译文标题", "Translated Title", level="version"),
+        _field("translated_publication_year", "译文出版年份", "Translated Publication Year", "year", level="version", validation_rule=r"\d{4}"),
+    ]
 
 
 def default_schema(corpus_type: str = "monolingual") -> MetadataSchema:
+    """Return a corpus-type-specific default schema.
+
+    Translation-specific fields are intentionally excluded from monolingual,
+    learner, spoken and comparable schemas. They are added only to parallel and
+    multiple-translation schemas.
+    """
+    corpus_type = corpus_type or "monolingual"
     schema = MetadataSchema(schema_name=f"{corpus_type}_default_schema", schema_version="1.0")
-    for f in deepcopy(BASE_FIELDS):
-        schema.add_field(f)
-    extra: list[MetadataField] = []
-    if corpus_type == "bilingual_parallel":
-        extra = [
-            MetadataField("translation_direction", "翻译方向", "Translation Direction", "translation_direction", "string", False, False, level="relation"),
-            MetadataField("alignment_level", "对齐层级", "Alignment Level", "alignment_level", "enum", False, False, controlled_values=["text", "paragraph", "sentence", "segment", "word"], level="alignment"),
-            MetadataField("source_text_id", "源文本ID", "Source Text ID", "source_text_id", "string", False, False, level="relation"),
-            MetadataField("target_text_id", "目标文本ID", "Target Text ID", "target_text_id", "string", False, False, level="relation"),
-        ]
+
+    fields: list[MetadataField]
+    if corpus_type == "monolingual":
+        fields = _corpus_fields(corpus_type) + _common_text_fields(include_language=True)
+    elif corpus_type == "bilingual_parallel":
+        fields = (
+            _corpus_fields(corpus_type)
+            + _common_text_fields(include_language=False)
+            + _translation_core_fields()
+            + [
+                _field("translation_direction", "翻译方向", "Translation Direction", level="relation", example="en-zh"),
+                _field("source_text_id", "源文本ID", "Source Text ID", level="relation"),
+                _field("target_text_id", "目标文本ID", "Target Text ID", level="relation"),
+                _field("alignment_level", "对齐层级", "Alignment Level", "enum", controlled_values=ALIGNMENT_VALUES, level="alignment"),
+                _field("alignment_file", "对齐文件", "Alignment File", "file_path", level="alignment"),
+            ]
+        )
     elif corpus_type == "multilingual_parallel":
-        extra = [
-            MetadataField("language_list", "语种列表", "Language List", "language_list", "language_code", False, True, level="corpus"),
-            MetadataField("version_id", "版本ID", "Version ID", "version_id", "string", False, False, level="version"),
-            MetadataField("version_relation", "版本关系", "Version Relation", "version_relation", "string", False, False, level="relation"),
-            MetadataField("alignment_file", "对齐文件", "Alignment File", "alignment_file", "file_path", False, False, level="alignment"),
-        ]
+        fields = (
+            _corpus_fields(corpus_type)
+            + _common_text_fields(include_language=False)
+            + _translation_core_fields()
+            + [
+                _field("language_list", "语种列表", "Language List", "language_code", repeatable=True, level="corpus", example="en; zh; ja"),
+                _field("version_id", "版本ID", "Version ID", level="version"),
+                _field("version_language", "版本语种", "Version Language", "language_code", level="version"),
+                _field("version_relation", "版本关系", "Version Relation", level="relation"),
+                _field("pivot_text_id", "枢轴文本ID", "Pivot Text ID", level="relation"),
+                _field("alignment_level", "对齐层级", "Alignment Level", "enum", controlled_values=ALIGNMENT_VALUES, level="alignment"),
+                _field("alignment_file", "对齐文件", "Alignment File", "file_path", level="alignment"),
+            ]
+        )
     elif corpus_type == "multiple_translations":
-        extra = [
-            MetadataField("source_text", "源文本", "Source Text", "source_text", "string", False, False, level="text"),
-            MetadataField("translation_version", "译本版本", "Translation Version", "translation_version", "string", False, False, level="version"),
-            MetadataField("translation_year", "翻译年份", "Translation Year", "translation_year", "year", False, False, level="version"),
-            MetadataField("edition", "版次", "Edition", "edition", "string", False, False, level="version"),
-            MetadataField("reprint_information", "重印信息", "Reprint Information", "reprint_information", "long_text", False, False, level="version"),
-            MetadataField("translation_strategy_notes", "翻译策略说明", "Translation Strategy Notes", "translation_strategy_notes", "long_text", False, False, level="version"),
-            MetadataField("version_relationship", "译本关系", "Version Relationship", "version_relationship", "string", False, False, level="relation"),
-        ]
+        fields = (
+            _corpus_fields(corpus_type)
+            + _common_text_fields(include_language=False)
+            + _translation_core_fields()
+            + [
+                _field("source_text_id", "源文本ID", "Source Text ID", level="relation"),
+                _field("translation_version", "译本版本", "Translation Version", level="version"),
+                _field("translation_year", "翻译年份", "Translation Year", "year", level="version", validation_rule=r"\d{4}"),
+                _field("edition", "版次", "Edition", level="version"),
+                _field("reprint_information", "重印信息", "Reprint Information", "long_text", level="version"),
+                _field("translation_strategy_notes", "翻译策略说明", "Translation Strategy Notes", "long_text", level="version"),
+                _field("version_relationship", "译本关系", "Version Relationship", level="relation"),
+            ]
+        )
     elif corpus_type == "learner":
-        extra = [
-            MetadataField("learner_l1", "学习者母语", "Learner L1", "learner_l1", "language_code", False, False, level="speaker"),
-            MetadataField("l2_level", "二语水平", "L2 Level", "l2_level", "enum", False, False, controlled_values=["A1", "A2", "B1", "B2", "C1", "C2", "unknown"], level="speaker"),
-            MetadataField("age_group", "年龄段", "Age Group", "age_group", "string", False, False, level="speaker", sensitive=True),
-            MetadataField("gender", "性别", "Gender", "gender", "enum", False, False, controlled_values=["unknown", "female", "male", "other", "not_disclosed"], level="speaker", sensitive=True),
-            MetadataField("education_background", "教育背景", "Education Background", "education_background", "string", False, False, level="speaker", sensitive=True),
-            MetadataField("task_type", "任务类型", "Task Type", "task_type", "string", False, False, level="text"),
-            MetadataField("exam_level", "考试等级", "Exam Level", "exam_level", "string", False, False, level="text"),
-            MetadataField("writing_prompt", "作文题目", "Writing Prompt", "writing_prompt", "long_text", False, False, level="text"),
+        fields = _corpus_fields(corpus_type) + _common_text_fields(include_language=True) + [
+            _field("learner_id", "学习者ID", "Learner ID", level="speaker", sensitive=True),
+            _field("learner_l1", "学习者母语", "Learner L1", "language_code", level="speaker"),
+            _field("target_language", "目标语/学习语", "Target/Learned Language", "language_code", level="speaker"),
+            _field("l2_level", "二语水平", "L2 Level", "enum", controlled_values=CEFR_VALUES, level="speaker"),
+            _field("age_group", "年龄段", "Age Group", level="speaker", sensitive=True),
+            _field("gender", "性别", "Gender", "enum", controlled_values=GENDER_VALUES, level="speaker", sensitive=True),
+            _field("education_background", "教育背景", "Education Background", level="speaker", sensitive=True),
+            _field("task_type", "任务类型", "Task Type", level="text"),
+            _field("exam_level", "考试等级", "Exam Level", level="text"),
+            _field("writing_prompt", "作文题目", "Writing Prompt", "long_text", level="text"),
         ]
     elif corpus_type == "spoken":
-        extra = [
-            MetadataField("speaker_id", "说话人ID", "Speaker ID", "speaker_id", "string", False, False, level="speaker", sensitive=True),
-            MetadataField("recording_file", "录音文件", "Recording File", "recording_file", "file_path", False, False, level="file"),
-            MetadataField("transcription_file", "转写文件", "Transcription File", "transcription_file", "file_path", False, False, level="file"),
-            MetadataField("setting", "场景", "Setting", "setting", "string", False, False, level="text"),
-            MetadataField("interaction_type", "交际类型", "Interaction Type", "interaction_type", "string", False, False, level="text"),
-            MetadataField("sampling_rate", "采样率", "Sampling Rate", "sampling_rate", "integer", False, False, level="file"),
-            MetadataField("transcription_convention", "转写规范", "Transcription Convention", "transcription_convention", "string", False, False, level="file"),
+        fields = _corpus_fields(corpus_type) + _common_text_fields(include_language=True) + [
+            _field("speaker_id", "说话人ID", "Speaker ID", level="speaker", sensitive=True),
+            _field("speaker_role", "说话人角色", "Speaker Role", level="speaker"),
+            _field("recording_file", "录音文件", "Recording File", "file_path", level="file"),
+            _field("transcription_file", "转写文件", "Transcription File", "file_path", level="file"),
+            _field("recording_date", "录音日期", "Recording Date", "date", level="file"),
+            _field("recording_location", "录音地点", "Recording Location", level="file", sensitive=True),
+            _field("setting", "场景", "Setting", level="text"),
+            _field("interaction_type", "交际类型", "Interaction Type", level="text"),
+            _field("duration", "时长", "Duration", level="file", example="00:12:35"),
+            _field("sampling_rate", "采样率", "Sampling Rate", "integer", level="file"),
+            _field("transcription_convention", "转写规范", "Transcription Convention", level="file"),
         ]
     elif corpus_type == "comparable":
-        extra = [
-            MetadataField("topic", "主题", "Topic", "topic", "string", False, False, level="text"),
-            MetadataField("comparability_basis", "可比依据", "Comparability Basis", "comparability_basis", "long_text", False, False, level="corpus"),
+        fields = _corpus_fields(corpus_type) + _common_text_fields(include_language=True) + [
+            _field("subcorpus_id", "子库ID", "Subcorpus ID", level="subcorpus"),
+            _field("subcorpus_name", "子库名称", "Subcorpus Name", level="subcorpus"),
+            _field("topic", "主题", "Topic", level="text"),
+            _field("domain", "领域", "Domain", level="text"),
+            _field("comparability_basis", "可比依据", "Comparability Basis", "long_text", level="corpus"),
+            _field("sampling_criteria", "抽样标准", "Sampling Criteria", "long_text", level="corpus"),
         ]
-    for f in extra:
-        f.order = len(schema.fields) + 1
-        schema.add_field(f)
+    else:
+        fields = _corpus_fields("custom") + _common_text_fields(include_language=True)
+
+    for i, field in enumerate(deepcopy(fields), start=1):
+        field.order = i
+        schema.add_field(field)
     return schema
 
 

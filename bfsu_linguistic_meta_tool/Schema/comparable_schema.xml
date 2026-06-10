@@ -1,0 +1,245 @@
+<?xml version='1.0' encoding='utf-8'?>
+<schema schema_id="schema_9f7aff5875" schema_name="comparable_default_schema" schema_version="1.0">
+    <field field_id="corpus_id" xml_tag="corpus_id" data_type="string" required="true" repeatable="false" level="corpus" parent="" order="1" visible="true" editable="true" sensitive="false">
+        <label lang="zh">语料库编号</label>
+        <label lang="en">Corpus ID</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="corpus_name" xml_tag="corpus_name" data_type="string" required="true" repeatable="false" level="corpus" parent="" order="2" visible="true" editable="true" sensitive="false">
+        <label lang="zh">语料库名称</label>
+        <label lang="en">Corpus Name</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="corpus_type" xml_tag="corpus_type" data_type="enum" required="true" repeatable="false" level="corpus" parent="" order="3" visible="true" editable="true" sensitive="false">
+        <label lang="zh">语料库类型</label>
+        <label lang="en">Corpus Type</label>
+        <default_value />
+        <controlled_values>
+            <value>monolingual</value>
+            <value>bilingual_parallel</value>
+            <value>multilingual_parallel</value>
+            <value>multiple_translations</value>
+            <value>comparable</value>
+            <value>learner</value>
+            <value>spoken</value>
+        </controlled_values>
+        <description lang="zh" />
+        <description lang="en" />
+        <example>comparable</example>
+        <validation_rule />
+    </field>
+    <field field_id="text_id" xml_tag="text_id" data_type="string" required="true" repeatable="false" level="text" parent="" order="4" visible="true" editable="true" sensitive="false">
+        <label lang="zh">文本编号</label>
+        <label lang="en">Text ID</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="title" xml_tag="title" data_type="string" required="true" repeatable="false" level="text" parent="" order="5" visible="true" editable="true" sensitive="false">
+        <label lang="zh">标题</label>
+        <label lang="en">Title</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="author" xml_tag="author" data_type="string" required="false" repeatable="true" level="text" parent="" order="6" visible="true" editable="true" sensitive="false">
+        <label lang="zh">作者</label>
+        <label lang="en">Author</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="language" xml_tag="language" data_type="language_code" required="false" repeatable="false" level="text" parent="" order="7" visible="true" editable="true" sensitive="false">
+        <label lang="zh">语种</label>
+        <label lang="en">Language</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example>zh</example>
+        <validation_rule />
+    </field>
+    <field field_id="publication_year" xml_tag="publication_year" data_type="year" required="false" repeatable="false" level="text" parent="" order="8" visible="true" editable="true" sensitive="false">
+        <label lang="zh">出版年份</label>
+        <label lang="en">Publication Year</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule>\d{4}</validation_rule>
+    </field>
+    <field field_id="publisher" xml_tag="publisher" data_type="string" required="false" repeatable="false" level="text" parent="" order="9" visible="true" editable="true" sensitive="false">
+        <label lang="zh">出版社</label>
+        <label lang="en">Publisher</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="genre" xml_tag="genre" data_type="enum" required="false" repeatable="false" level="text" parent="" order="10" visible="true" editable="true" sensitive="false">
+        <label lang="zh">文类</label>
+        <label lang="en">Genre</label>
+        <default_value />
+        <controlled_values>
+            <value>fiction</value>
+            <value>news</value>
+            <value>academic</value>
+            <value>spoken</value>
+            <value>legal</value>
+            <value>educational</value>
+            <value>other</value>
+        </controlled_values>
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="text_type" xml_tag="text_type" data_type="string" required="false" repeatable="false" level="text" parent="" order="11" visible="true" editable="true" sensitive="false">
+        <label lang="zh">体裁/文本类型</label>
+        <label lang="en">Text Type</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="word_count" xml_tag="word_count" data_type="integer" required="false" repeatable="false" level="text" parent="" order="12" visible="true" editable="true" sensitive="false">
+        <label lang="zh">词数</label>
+        <label lang="en">Word Count</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="character_count" xml_tag="character_count" data_type="integer" required="false" repeatable="false" level="text" parent="" order="13" visible="true" editable="true" sensitive="false">
+        <label lang="zh">字数</label>
+        <label lang="en">Character Count</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="source_file" xml_tag="source_file" data_type="file_path" required="false" repeatable="false" level="file" parent="" order="14" visible="true" editable="true" sensitive="false">
+        <label lang="zh">源文件</label>
+        <label lang="en">Source File</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="copyright_status" xml_tag="copyright_status" data_type="enum" required="false" repeatable="false" level="text" parent="" order="15" visible="true" editable="true" sensitive="false">
+        <label lang="zh">版权状态</label>
+        <label lang="en">Copyright Status</label>
+        <default_value />
+        <controlled_values>
+            <value>unknown</value>
+            <value>public_domain</value>
+            <value>licensed</value>
+            <value>permission_required</value>
+            <value>restricted</value>
+        </controlled_values>
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="notes" xml_tag="notes" data_type="long_text" required="false" repeatable="false" level="text" parent="" order="16" visible="true" editable="true" sensitive="false">
+        <label lang="zh">备注</label>
+        <label lang="en">Notes</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="subcorpus_id" xml_tag="subcorpus_id" data_type="string" required="false" repeatable="false" level="subcorpus" parent="" order="17" visible="true" editable="true" sensitive="false">
+        <label lang="zh">子库ID</label>
+        <label lang="en">Subcorpus ID</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="subcorpus_name" xml_tag="subcorpus_name" data_type="string" required="false" repeatable="false" level="subcorpus" parent="" order="18" visible="true" editable="true" sensitive="false">
+        <label lang="zh">子库名称</label>
+        <label lang="en">Subcorpus Name</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="topic" xml_tag="topic" data_type="string" required="false" repeatable="false" level="text" parent="" order="19" visible="true" editable="true" sensitive="false">
+        <label lang="zh">主题</label>
+        <label lang="en">Topic</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="domain" xml_tag="domain" data_type="string" required="false" repeatable="false" level="text" parent="" order="20" visible="true" editable="true" sensitive="false">
+        <label lang="zh">领域</label>
+        <label lang="en">Domain</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="comparability_basis" xml_tag="comparability_basis" data_type="long_text" required="false" repeatable="false" level="corpus" parent="" order="21" visible="true" editable="true" sensitive="false">
+        <label lang="zh">可比依据</label>
+        <label lang="en">Comparability Basis</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+    <field field_id="sampling_criteria" xml_tag="sampling_criteria" data_type="long_text" required="false" repeatable="false" level="corpus" parent="" order="22" visible="true" editable="true" sensitive="false">
+        <label lang="zh">抽样标准</label>
+        <label lang="en">Sampling Criteria</label>
+        <default_value />
+        <controlled_values />
+        <description lang="zh" />
+        <description lang="en" />
+        <example />
+        <validation_rule />
+    </field>
+</schema>

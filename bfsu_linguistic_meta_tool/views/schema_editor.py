@@ -41,13 +41,15 @@ class SchemaEditor(ttk.Frame):
         toolbar.grid(row=0, column=0, sticky="ew", padx=4, pady=4)
         self.add_btn = ttk.Button(toolbar, command=self.add_field)
         self.del_btn = ttk.Button(toolbar, command=self.delete_selected)
+        self.select_all_btn = ttk.Button(toolbar, command=self.select_all)
+        self.delete_all_btn = ttk.Button(toolbar, command=self.delete_all_fields)
         self.up_btn = ttk.Button(toolbar, command=lambda: self.move_selected(-1))
         self.down_btn = ttk.Button(toolbar, command=lambda: self.move_selected(1))
         self.apply_btn = ttk.Button(toolbar, command=self.apply_selected)
-        for btn in (self.add_btn, self.del_btn, self.up_btn, self.down_btn, self.apply_btn):
+        for btn in (self.add_btn, self.del_btn, self.select_all_btn, self.delete_all_btn, self.up_btn, self.down_btn, self.apply_btn):
             btn.pack(side="left", padx=2)
 
-        self.tree = ttk.Treeview(self, columns=self.COLUMNS, show="headings", selectmode="browse", height=12)
+        self.tree = ttk.Treeview(self, columns=self.COLUMNS, show="headings", selectmode="extended", height=12)
         ysb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
         xsb = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
@@ -55,6 +57,9 @@ class SchemaEditor(ttk.Frame):
         ysb.grid(row=1, column=1, sticky="ns", pady=(0, 4))
         xsb.grid(row=2, column=0, sticky="ew", padx=4)
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        self.tree.bind("<Control-a>", self.select_all_event)
+        self.tree.bind("<Control-A>", self.select_all_event)
+        self.tree.bind("<Delete>", lambda _e: self.delete_selected())
 
         detail = ttk.LabelFrame(self, text="Field")
         detail.grid(row=3, column=0, columnspan=2, sticky="ew", padx=4, pady=4)
@@ -104,7 +109,7 @@ class SchemaEditor(ttk.Frame):
     def set_enabled(self, enabled: bool) -> None:
         self.enabled = enabled
         state = "normal" if enabled else "disabled"
-        for btn in (self.add_btn, self.del_btn, self.up_btn, self.down_btn, self.apply_btn):
+        for btn in (self.add_btn, self.del_btn, self.select_all_btn, self.delete_all_btn, self.up_btn, self.down_btn, self.apply_btn):
             btn.configure(state=state)
         try:
             self.tree.state(["!disabled"] if enabled else ["disabled"])
@@ -117,7 +122,7 @@ class SchemaEditor(ttk.Frame):
 
     def _set_children_state(self, widget: tk.Widget, enabled: bool) -> None:
         for child in widget.winfo_children():
-            if child in {self.tree, self.add_btn, self.del_btn, self.up_btn, self.down_btn, self.apply_btn}:
+            if child in {self.tree, self.add_btn, self.del_btn, self.select_all_btn, self.delete_all_btn, self.up_btn, self.down_btn, self.apply_btn}:
                 continue
             try:
                 if isinstance(child, ttk.Combobox):
@@ -151,6 +156,8 @@ class SchemaEditor(ttk.Frame):
     def refresh_language(self) -> None:
         self.add_btn.configure(text=self.i18n.t("add"))
         self.del_btn.configure(text=self.i18n.t("delete"))
+        self.select_all_btn.configure(text=self.i18n.t("select_all"))
+        self.delete_all_btn.configure(text=self.i18n.t("delete_all"))
         self.up_btn.configure(text=self.i18n.t("move_up"))
         self.down_btn.configure(text=self.i18n.t("move_down"))
         self.apply_btn.configure(text=self.i18n.t("apply"))
@@ -240,14 +247,49 @@ class SchemaEditor(ttk.Frame):
         self.on_select()
         self._changed()
 
+    def select_all_event(self, _event=None):  # noqa: ANN001, ANN202
+        self.select_all()
+        return "break"
+
+    def select_all(self) -> None:
+        if not self.schema or not self.enabled:
+            return
+        children = self.tree.get_children()
+        if children:
+            self.tree.selection_set(children)
+
     def delete_selected(self) -> None:
         if not self.schema or not self.enabled:
             return
-        sel = self.tree.selection()
-        if not sel:
+        selected = list(self.tree.selection())
+        if not selected:
             return
-        self.schema.remove_field(sel[0])
+        if len(selected) > 1:
+            if not messagebox.askyesno(
+                self.i18n.t("confirm"),
+                self.i18n.t("confirm_delete_schema_fields", count=len(selected)),
+            ):
+                return
+        for field_id in selected:
+            self.schema.remove_field(field_id)
         self.refresh_table()
+        self._clear_form()
+        self._changed()
+
+    def delete_all_fields(self) -> None:
+        if not self.schema or not self.enabled:
+            return
+        count = len(self.schema.fields)
+        if count <= 0:
+            return
+        if not messagebox.askyesno(
+            self.i18n.t("confirm"),
+            self.i18n.t("confirm_delete_all_schema_fields", count=count),
+        ):
+            return
+        self.schema.fields.clear()
+        self.refresh_table()
+        self._clear_form()
         self._changed()
 
     def move_selected(self, direction: int) -> None:
@@ -256,9 +298,10 @@ class SchemaEditor(ttk.Frame):
         sel = self.tree.selection()
         if not sel:
             return
-        self.schema.move_field(sel[0], direction)
+        field_id = sel[0]
+        self.schema.move_field(field_id, direction)
         self.refresh_table()
-        self.tree.selection_set(sel[0])
+        self.tree.selection_set(field_id)
         self._changed()
 
     def apply_selected(self) -> None:
