@@ -13,9 +13,14 @@ Windows x64 图形界面可执行程序可通过百度网盘下载。
 File / 文件名： bfsu_linguistic_meta_tool.zip
 
 Download Link / 下载链接：
-https://pan.baidu.com/s/1o_s_IJDF_xEKCuYAjJxfZg
 
-Extraction Code / 提取码： vvmy
+https://pan.baidu.com/s/1PO5hpRC0RogPcWPALNEjQw
+
+Extraction Code / 提取码: 9kst 
+
+Baidu Netdisk App Scan for downloading: 百度网盘app扫码下载
+
+<img width="320" height="320" alt="image" src="https://github.com/user-attachments/assets/a9ee260b-d3b7-4326-a1e1-812ec1821559" />
 
 ## 1. Main Features / 主要功能
 
