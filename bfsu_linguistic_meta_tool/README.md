@@ -1,3 +1,11 @@
+## Good News
+版本更新 / Version Update
+
+本版本加入了大模型辅助元信息整理功能，元信息制作终于不再是“对着表格、PDF、XML 和各种字段发呆”的纯手工劳动了。用户可以上传或粘贴文本、PDF、图片、网页等材料，让大模型根据当前 Schema 自动识别标题、作者、年份、语种、文类等元信息，并在人工检查后回填到记录中。同时，软件还支持大模型辅助生成或扩展 Schema，帮助用户更快搭建适合不同语料库项目的元信息规范。简单来说，以前元信息整理像是一场耐力赛；现在，它更像是有人先帮你把草稿整理好，你只需要把关、修改和确认。希望这个版本能让语料库建设少一点折磨，多一点顺手。
+
+This version introduces LLM-assisted metadata processing, making metadata work much less of a “staring at tables, PDFs, XML tags, and endless fields” experience. Users can upload or paste texts, PDFs, images, webpages, and other materials, and the model will suggest metadata values such as title, author, year, language, genre, and other Schema-defined fields. All suggestions are reviewed by the user before being written back to the record. The software also supports LLM-assisted Schema generation and extension, helping users build metadata structures for different corpus projects more efficiently. In short, metadata editing used to feel like an endurance test; now, the model prepares a first draft, and users can focus on checking, refining, and confirming. Hopefully, this update makes corpus metadata management a little less painful and a lot more manageable.
+
+
 # Linguistic Metadata Tool / 语言学语料库元信息制作工具 v2.0
 
 A cross-platform Python desktop application for creating, editing, importing, exporting and managing metadata for linguistic corpora, corpus construction projects and corpus translation studies.
