@@ -225,7 +225,7 @@ This makes it straightforward to add TEI export, corpus-specific templates, batc
 
 Software Name / 软件名称: Metadata Editing and Management Tool / 元信息制作工具
 
-Version / 版本号: V1.0.0
+Version / 版本号: V2.0.0
 
 Developer / 开发者: Dr. Dingjia LIU / 刘鼎甲 博士
 
