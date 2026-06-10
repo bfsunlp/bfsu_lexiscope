@@ -2,28 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="34ff85da-63cc-4dbe-8764-803be87cc5ca" name="更改" comment="The first version of bfsu_meta_tool">
-      <change afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/assets/app.ico" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/docs/LLM_METADATA_PROMPT.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/llm_metadata.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/ai_dialogs.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/controllers.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/controllers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/i18n.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/i18n.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/requirements.txt" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/bilingual_parallel_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/Schema/bilingual_parallel_schema.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/default.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/Schema/comparable_schema.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/learner_corpus_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/Schema/learner_corpus_schema.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/monolingual_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/Schema/monolingual_schema.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/multilingual_parallel_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/Schema/multilingual_parallel_schema.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/multiple_translations_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/Schema/multiple_translations_schema.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema/spoken_corpus_schema.xml" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/Schema/spoken_corpus_schema.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/schema_manager.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/main_window.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/record_editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/record_editor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/schema_editor.py" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_linguistic_meta_tool/views/schema_editor.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -157,7 +136,7 @@
       <option name="presentableId" value="Default" />
       <updated>1780973235019</updated>
       <workItem from="1780973236079" duration="9472000" />
-      <workItem from="1781060718769" duration="4637000" />
+      <workItem from="1781060718769" duration="6352000" />
     </task>
     <task id="LOCAL-00001" summary="The first version of bfsu_meta_tool">
       <option name="closed" value="true" />
@@ -199,7 +178,15 @@
       <option name="project" value="LOCAL" />
       <updated>1780980478868</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="The first version of bfsu_meta_tool">
+      <option name="closed" value="true" />
+      <created>1781065570932</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1781065570932</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -210,7 +197,7 @@
     <option name="LAST_COMMIT_MESSAGE" value="The first version of bfsu_meta_tool" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/bfsu_lexiscope$main__1_.coverage" NAME="main (1) 覆盖结果" MODIFIED="1781065118511" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_linguistic_meta_tool" />
+    <SUITE FILE_PATH="coverage/bfsu_lexiscope$main__1_.coverage" NAME="main (1) 覆盖结果" MODIFIED="1781067254810" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_linguistic_meta_tool" />
     <SUITE FILE_PATH="coverage/bfsu_lexiscope$main.coverage" NAME="main 覆盖结果" MODIFIED="1780973264906" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_meta_tool" />
   </component>
 </project>
