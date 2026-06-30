@@ -3,6 +3,8 @@
   <component name="ChangeListManager">
     <list default="true" id="34ff85da-63cc-4dbe-8764-803be87cc5ca" name="更改" comment="The second version of bfsu_meta_tool with extended llm capabilities">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_prooflens/config/user_config.json" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_prooflens/config/user_config.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/bfsu_prooflens/logs/app.log" beforeDir="false" afterPath="$PROJECT_DIR$/bfsu_prooflens/logs/app.log" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -166,7 +168,7 @@
       <workItem from="1781073272273" duration="1000" />
       <workItem from="1781605148541" duration="9000" />
       <workItem from="1782712946921" duration="15154000" />
-      <workItem from="1782779217444" duration="2681000" />
+      <workItem from="1782779217444" duration="3540000" />
     </task>
     <task id="LOCAL-00001" summary="The first version of bfsu_meta_tool">
       <option name="closed" value="true" />
@@ -240,7 +242,31 @@
       <option name="project" value="LOCAL" />
       <updated>1781067915512</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="The second version of bfsu_meta_tool with extended llm capabilities">
+      <option name="closed" value="true" />
+      <created>1782782084898</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1782782084898</updated>
+    </task>
+    <task id="LOCAL-00011" summary="The second version of bfsu_meta_tool with extended llm capabilities">
+      <option name="closed" value="true" />
+      <created>1782782212524</created>
+      <option name="number" value="00011" />
+      <option name="presentableId" value="LOCAL-00011" />
+      <option name="project" value="LOCAL" />
+      <updated>1782782212524</updated>
+    </task>
+    <task id="LOCAL-00012" summary="The second version of bfsu_meta_tool with extended llm capabilities">
+      <option name="closed" value="true" />
+      <created>1782782594951</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1782782594951</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -252,7 +278,7 @@
     <option name="LAST_COMMIT_MESSAGE" value="The second version of bfsu_meta_tool with extended llm capabilities" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/bfsu_lexiscope$main__2_.coverage" NAME="main (2) 覆盖结果" MODIFIED="1782781973275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_prooflens" />
+    <SUITE FILE_PATH="coverage/bfsu_lexiscope$main__2_.coverage" NAME="main (2) 覆盖结果" MODIFIED="1782782824577" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_prooflens" />
     <SUITE FILE_PATH="coverage/bfsu_lexiscope$main__1_.coverage" NAME="main (1) 覆盖结果" MODIFIED="1781067254810" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_linguistic_meta_tool" />
     <SUITE FILE_PATH="coverage/bfsu_lexiscope$main.coverage" NAME="main 覆盖结果" MODIFIED="1780973264906" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/bfsu_meta_tool" />
   </component>
