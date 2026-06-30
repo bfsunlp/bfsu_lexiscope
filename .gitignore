@@ -6,3 +6,8 @@ bfsu_prooflens/models/
 *.pth
 *.pt
 *.onnx
+
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/shelf/
