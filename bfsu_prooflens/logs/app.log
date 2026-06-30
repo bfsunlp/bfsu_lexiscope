@@ -8,3 +8,4 @@
 2026-06-30 08:40:59,510 [INFO] bfsu_prooflens: Batch OCR completed: {'operation': 'easyocr', 'total': 1, 'completed': 1, 'failed': 0, 'errors': [], 'elapsed_seconds': 3.973484699963592, 'workers': 1, 'backend': 'thread', 'engine': 'easyocr'}
 2026-06-30 08:42:31,111 [INFO] bfsu_prooflens: Batch LLM proofreading completed: {'operation': 'llm_proofread', 'total': 1, 'completed': 1, 'failed': 0, 'errors': [], 'elapsed_seconds': 89.10510619997513, 'workers': 1, 'backend': 'thread'}
 2026-06-30 09:12:54,537 [INFO] bfsu_prooflens: BFSU ProofLens started
+2026-06-30 09:27:05,510 [INFO] bfsu_prooflens: BFSU ProofLens started
