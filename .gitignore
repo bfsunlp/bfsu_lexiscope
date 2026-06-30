@@ -1,0 +1,8 @@
+# local config with API keys
+bfsu_prooflens/config/user_config.json
+
+# OCR / model weights
+bfsu_prooflens/models/
+*.pth
+*.pt
+*.onnx
