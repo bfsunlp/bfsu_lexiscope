@@ -1,0 +1,11 @@
+rapidocr
+onnxruntime
+easyocr
+torch
+torchvision
+pillow
+pymupdf
+python-docx
+openpyxl
+markdown
+openai

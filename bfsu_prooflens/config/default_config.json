@@ -1,0 +1,66 @@
+{
+  "ui_language": "en",
+  "default_project_dir": "projects",
+  "default_export_dir": "output",
+  "autosave_interval_minutes": 5,
+  "restore_last_project": false,
+  "last_project_path": "",
+  "ocr": {
+    "backend": "rapidocr",
+    "language_preset": "zh_en_mixed",
+    "selected_languages": [
+      "zh",
+      "en"
+    ],
+    "mixed_language_mode": true,
+    "rapid_lang": "ch",
+    "rapidocr_model_dir": "models/rapidocr",
+    "rapidocr_model_type": "small",
+    "use_gpu": false,
+    "keep_coordinates": true,
+    "keep_confidence": true,
+    "use_angle_cls": true,
+    "pdf_dpi": 200,
+    "parallel_backend": "thread",
+    "max_workers": 1,
+    "easyocr_model_dir": "models/easyocr",
+    "easyocr_light_mode": true,
+    "easyocr_canvas_size": 1280,
+    "easyocr_mag_ratio": 1.0,
+    "easyocr_paragraph": false,
+    "model_download_policy": "ask",
+    "download_enabled": true,
+    "preview_max_side": 1400,
+    "prefer_pdf_text_layer": true,
+    "text_layout": "paragraph",
+    "auto_fallback_to_easyocr": true
+  },
+  "llm": {
+    "enabled": false,
+    "api_key": "",
+    "model": "gpt-5-mini",
+    "temperature": 0,
+    "max_output_tokens": 4096,
+    "structured_json": true,
+    "save_api_logs": false,
+    "confirm_before_send": true,
+    "allow_send_image": true,
+    "allow_send_text": true,
+    "max_concurrent_requests": 1,
+    "auto_repair_non_json": true
+  },
+  "privacy": {
+    "local_only": true,
+    "remind_before_llm": true,
+    "do_not_save_api_key": false
+  },
+  "export": {
+    "include_ocr_text": true,
+    "include_corrected_text": true,
+    "include_final_text": true,
+    "include_suggestions": true,
+    "include_ocr_blocks": true,
+    "final_text_only": false,
+    "split_by_source_file": false
+  }
+}
