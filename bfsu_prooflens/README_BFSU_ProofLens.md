@@ -1,4 +1,4 @@
-# Good News!
+# Good News
 
 ## 版本更新 / Version Update
 
