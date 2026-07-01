@@ -105,9 +105,9 @@ https://pan.baidu.com/s/1PO5hpRC0RogPcWPALNEjQw
 
 **Download Link / 下载链接：**
 
-https://pan.baidu.com/s/1PYXgzVg17QT48PWGRNiumA
+https://pan.baidu.com/s/19u46YGnbivyBOKmSPoYDcw?pwd=ztdx
 
-**Extraction Code / 提取码：** `48td`
+**Extraction Code / 提取码：** `ztdx`
 
 ---
 

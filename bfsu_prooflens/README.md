@@ -1,4 +1,4 @@
-# Good News!
+# Good News
 
 ## 版本更新 / Version Update
 
@@ -30,9 +30,9 @@ Windows x64 图形界面可执行程序可通过百度网盘下载。
 
 **Download Link / 下载链接：**
 
-https://pan.baidu.com/s/1PYXgzVg17QT48PWGRNiumA
+链接:https://pan.baidu.com/s/19u46YGnbivyBOKmSPoYDcw?pwd=ztdx
 
-**Extraction Code / 提取码：** `48td`
+**Extraction Code / 提取码：** `ztdx`
 
 ---
 

@@ -291,9 +291,18 @@ class RapidOCRBackend(OCRBackend):
             import rapidocr as rapidocr_pkg  # type: ignore
             from rapidocr import RapidOCR  # type: ignore
         except Exception as exc:
+            # In PyInstaller packages, this error can also mean that RapidOCR or
+            # ONNXRuntime was installed during build but its dynamic submodules,
+            # binaries or package metadata were not collected into dist.  Keep
+            # the user-facing hint short, but include the real import exception
+            # so the log/dialog can identify missing DLLs or metadata.
+            detail = f"{exc.__class__.__name__}: {exc}"
             raise RuntimeError(
-                "未安装 RapidOCR 或 onnxruntime。请先运行：\n"
-                "python -m pip install rapidocr onnxruntime"
+                "未安装 RapidOCR 或 ONNXRuntime，或打包时未完整收集 RapidOCR/ONNXRuntime 依赖。\n\n"
+                "源码环境安装命令：\n"
+                "python -m pip install rapidocr onnxruntime\n\n"
+                "如果这是 PyInstaller 打包后的程序，请使用本软件包中的新版 build_exe.bat 重新打包。\n\n"
+                f"实际导入错误：{detail}"
             ) from exc
 
         model_dir = Path(str(self.options.get("rapidocr_model_dir") or self.options.get("model_dir") or "models/rapidocr"))
