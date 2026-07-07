@@ -1,0 +1,24 @@
+# BFSU AlignLens CPU-only dependency set for machines where smaller installation size matters.
+# Use requirements.txt for the default CUDA-enabled GPU/CPU-compatible install.
+torch>=2.1
+torchvision>=0.16
+torchaudio>=2.1
+numpy>=1.24
+scipy>=1.10
+openpyxl>=3.1
+python-docx>=1.1
+striprtf>=0.0.26
+charset-normalizer>=3.3
+sentence-transformers>=2.7
+transformers>=4.40
+tqdm>=4.66
+openai>=1.40
+lxml>=5.0
+
+stanza>=1.9
+
+spacy>=3.7
+
+hanlp>=2.1
+
+Pillow>=10.0

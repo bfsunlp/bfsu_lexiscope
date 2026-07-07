@@ -1,0 +1,39 @@
+{
+  "sentence_transformers": [
+    {
+      "name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+      "role": "speed-first default"
+    },
+    {
+      "name": "sentence-transformers/LaBSE",
+      "role": "high accuracy"
+    },
+    {
+      "name": "sentence-transformers/distiluse-base-multilingual-cased-v2",
+      "role": "light optional"
+    },
+    {
+      "name": "intfloat/multilingual-e5-small",
+      "role": "optional"
+    },
+    {
+      "name": "intfloat/multilingual-e5-base",
+      "role": "optional"
+    }
+  ],
+  "segmentation": [
+    "HanLP UD_CTB_EOS_MUL",
+    "stanza zh",
+    "stanza en",
+    "stanza de",
+    "stanza fr",
+    "stanza es",
+    "stanza ru",
+    "stanza ja",
+    "stanza ko",
+    "spaCy en_core_web_sm",
+    "spaCy de_core_news_sm",
+    "spaCy fr_core_news_sm",
+    "spaCy es_core_news_sm"
+  ]
+}
