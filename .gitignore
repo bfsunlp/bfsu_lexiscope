@@ -11,3 +11,68 @@ bfsu_prooflens/models/
 .idea/tasks.xml
 .idea/usage.statistics.xml
 .idea/shelf/
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round2.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round3.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round4.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round5.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round6.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round7.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round8.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round9.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round10.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round11.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-06_round12.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round13.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round14.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round15.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round16.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round17.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round18.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round19.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round20.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round21.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round22.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round23.md
+/bfsu_alignlens/RELEASE_NOTES_2026-07-07_round24.md
+/bfsu_alignlens/models/hanlp/
+/bfsu_alignlens/models/hf_home/
+/bfsu_alignlens/models/segmenters/
+/bfsu_alignlens/models/sentence_transformers/
+
+# PyInstaller build output
+build/
+dist/
+*.spec
+
+# Local models
+models/
+
+# Runtime files
+log/
+logs/
+exports/
+temp/
+tmp/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+.venv_*/
+venv/
+env/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# PyCharm local files
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/shelf/
+
