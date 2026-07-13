@@ -9,8 +9,9 @@
 - **BFSU MetaTools / 语言学语料库元信息制作工具**
 - **BFSU ProofLens / OCR 识别与校对工具**
 - **BFSU AlignLens / 多语翻译对齐工具**
+- **BFSU WebLens / 网络语料检索与网页下载工具**
 
-更多面向语料库数据处理、统计分析、可视化和智能标注的模块正在规划和开发中，敬请期待。
+更多面向语料库采集、数据处理、统计分析、可视化和智能标注的模块正在规划和开发中，敬请期待。
 
 ---
 
@@ -19,7 +20,8 @@
 BFSU LexiScope aims to provide a practical and research-oriented toolchain for corpus researchers. The project focuses on the full workflow of corpus-based research:
 
 ```text
-data collection → metadata management → OCR/text digitization
+web discovery / data collection → URL and source-page archiving
+→ metadata management → OCR/text digitization
 → multilingual text alignment → text cleaning → corpus organization
 → annotation → retrieval → statistical analysis → visualization
 ```
@@ -153,6 +155,68 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 
 **Extraction Code / 提取码：** `ihjx`
 
+
+### 1.4 BFSU WebLens / 网络语料检索与网页下载工具
+
+**BFSU WebLens** is a conservative web-search, URL discovery, source-page downloading, and multilingual text-cleaning tool for corpus construction and web-based discourse research. It is designed for researchers who need traceable search-result collection rather than high-frequency crawling. WebLens currently provides separated Google and Baidu panels, auditable query metadata, result preview, sampling, export, source-page downloading, multilingual encoding repair, clean TXT output, and content-download breakpoint continuation.
+
+**BFSU WebLens / 网络语料检索与网页下载工具** 面向网络语料库建设、新闻语料采集、语料库话语研究、国际传播研究、翻译与传媒研究中的网页材料准备。它不是高频爬虫，而是一个低频、保守、可审计的网页检索和正文下载工具，重点解决“如何可追溯地获得搜索结果 URL、保存来源网页、抽取多语种正文、导出语料库建设所需元信息”等问题。其核心工作流为：
+
+```text
+检索设置 → Google / 百度低频检索 → URL 结果预览与去重
+→ 抽样或人工编辑 → 多格式导出 → 正文下载
+→ 多语种编码修复与正文清洗 → 语料 TXT 与 metadata 保存
+```
+
+#### Main Features / 主要功能
+
+- 独立的 Google 和百度面板，两个搜索引擎的设置、日志、结果预览、导出和下载互不混合；
+- Google 支持普通网页检索与 Google News 检索；
+- Google 支持检索辅助模式，包括单词、任一词 / OR、全部词、精确短语、任一精确短语 / OR 和原始检索式；
+- Google 支持结果语种限制、国家 / 地区限制、站点 / 域名限制和日期范围检索；
+- 百度支持百度网页、百度资讯和百度资讯媒体网站；
+- 百度支持通过 `site:{domain}` 形式限定来源网站，通过 `gpc=stf=...|stftype=2` 与 `tfflag=1` 实现日期范围筛选，通过 `medium=1` 筛选媒体资讯结果；
+- Google 与百度均支持多行站点 / 域名限定，每行可填写一个域名、域名后缀或 `site:` 表达式；
+- 支持 requests、Selenium Chrome、Selenium Edge 等检索方式，并提供页面延时、切片延时、错误冷却、浏览器定期重启等参数；
+- 支持保守的低频访问策略，默认页面延时较长，便于降低访问压力并提高页面加载完整性；
+- 支持搜索结果预览、去重、采样、撤销、重做、重置和人工编辑；
+- 支持导出 XLSX、CSV、TXT、DOCX、XML 等格式，其中 XLSX 适合保存语料库建设日志和元信息；
+- 支持对已爬取或导入的链接进行正文下载，下载模式可选 requests、Selenium 或二者混合；
+- 正文下载支持多线程、失败重试、单条任务超时、停止下载、同域名串行控制和内容下载断点续传；
+- 断点续传只用于正文下载，不用于搜索结果爬取，以避免软件在用户不知情的情况下继续访问搜索引擎；
+- 多语种正文抽取采用分层降级策略，包括原始字节保存、编码自动检测、乱码修复、`newspaper3k`、站点模板、`article/main/content` 候选区、可见文本抽取和 clean TXT 输出；
+- 对中文新闻网页进行了增强兼容，包括常见 mojibake 乱码修复和若干中文新闻站点正文模板；
+- 打包版采用 PyInstaller `onedir` 结构，`BFSU_WebLens.exe` 位于发布目录外层，依赖和资源位于 `_internal` 文件夹中；
+- 根目录 `preinstall` 文件夹中可放置与内置 ChromeDriver / EdgeDriver 适配的浏览器安装包，便于用户配置 Selenium 后端。
+
+#### Download / 下载
+
+**File / 文件名：** `BFSU_WebLens.zip`
+
+**Windows Executable / Windows 可执行版：**
+
+https://pan.baidu.com/s/1UFnlZqa8PsA3TDZDqQfe0g
+
+**Extraction Code / 提取码：** `s4mp`
+
+#### Notes / 使用提示
+
+- 普通用户建议下载 Windows 可执行版，解压后运行 `BFSU_WebLens.exe`。
+- 发布版通常采用如下结构，请不要把 exe 单独移出文件夹运行：
+
+```text
+BFSU_WebLens/
+  BFSU_WebLens.exe
+  README.md
+  requirements.txt
+  preinstall/
+  _internal/
+```
+
+- 如果使用 Selenium Chrome 或 Selenium Edge 模式，建议安装发布包根目录 `preinstall` 文件夹中的浏览器安装包，以适配已有的 ChromeDriver / EdgeDriver 和 Selenium 环境。
+- 如果只使用 requests 后端，通常不需要安装额外浏览器。
+- WebLens 仅用于合法、低频、研究导向的网页发现和语料准备。用户应自行遵守网站服务条款、robots/访问政策、版权、隐私、访问频率限制以及相关法律法规。
+
 ---
 
 ## 2. Planned Tools / 规划中工具
@@ -231,27 +295,29 @@ Planned functions include:
 A typical BFSU LexiScope workflow may look like this:
 
 ```text
-1. Use BFSU ProofLens to convert scanned PDFs or images into editable text.
-2. Proofread OCR results manually or with LLM assistance.
-3. Export clean text files.
-4. Use BFSU AlignLens to segment and align multilingual or translated texts.
-5. Export aligned files as Excel, TMX, XML, JSON or line-aligned TXT files.
-6. Use BFSU MetaTools to create metadata schemas and records.
-7. Link text files or aligned files with metadata records.
-8. Use future LexiScope modules for cleaning, annotation, retrieval, statistics and visualization.
+1. Use BFSU WebLens to discover web/news URLs, archive source pages, extract multilingual clean text, and export search/download metadata.
+2. Use BFSU ProofLens to convert scanned PDFs or images into editable text.
+3. Proofread OCR results manually or with LLM assistance.
+4. Export clean text files.
+5. Use BFSU AlignLens to segment and align multilingual or translated texts.
+6. Export aligned files as Excel, TMX, XML, JSON or line-aligned TXT files.
+7. Use BFSU MetaTools to create metadata schemas and records.
+8. Link web texts, OCR texts, or aligned files with metadata records.
+9. Use future LexiScope modules for cleaning, annotation, retrieval, statistics and visualization.
 ```
 
 典型使用流程可以概括为：
 
 ```text
-1. 使用 BFSU ProofLens 将扫描版 PDF 或图片转换为可编辑文本；
-2. 通过人工或大模型辅助方式校对 OCR 结果；
-3. 导出清理后的文本；
-4. 使用 BFSU AlignLens 对多语文本、翻译文本或一本多译文本进行分段、分句和对齐；
-5. 将对齐结果导出为 Excel、TMX、XML、JSON 或按语种行号对齐的 TXT 文件；
-6. 使用 BFSU MetaTools 建立语料库元信息规范和记录；
-7. 将文本文件或对齐文件与元信息记录关联；
-8. 后续使用 LexiScope 系列工具完成清洗、标注、检索、统计和可视化分析。
+1. 使用 BFSU WebLens 发现网络新闻或网页 URL，保存来源页面，抽取多语种干净文本，并导出检索与下载元信息；
+2. 使用 BFSU ProofLens 将扫描版 PDF 或图片转换为可编辑文本；
+3. 通过人工或大模型辅助方式校对 OCR 结果；
+4. 导出清理后的文本；
+5. 使用 BFSU AlignLens 对多语文本、翻译文本或一本多译文本进行分段、分句和对齐；
+6. 将对齐结果导出为 Excel、TMX、XML、JSON 或按语种行号对齐的 TXT 文件；
+7. 使用 BFSU MetaTools 建立语料库元信息规范和记录；
+8. 将网页文本、OCR 文本或对齐文件与元信息记录关联；
+9. 后续使用 LexiScope 系列工具完成清洗、标注、检索、统计和可视化分析。
 ```
 
 ---
@@ -328,6 +394,7 @@ Each subtool may require additional `--add-data`, `--collect-submodules` and `--
 
 Planned development directions include:
 
+- 完善 WebLens 网络语料采集、正文下载、多语种清洗和来源元信息追踪工作流；
 - 完善 OCR 与校对工作流；
 - 完善多语翻译对齐、对齐检查和语料导出工作流；
 - 增强大模型辅助语料处理能力；
