@@ -77,3 +77,10 @@ Thumbs.db
 .idea/shelf/
 
 
+/bfsu_weblens/preinstall/google-chrome-beta-150-0-7871-46.msi
+/bfsu_weblens/preinstall/microsoft-edge-150-0-4078-48.msi
+
+bfsu_weblens/bfsu_weblens/preinstall/
+bfsu_weblens/preinstall/
+
+bfsu_weblens/tools/

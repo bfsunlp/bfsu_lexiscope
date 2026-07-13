@@ -1,0 +1,9 @@
+beautifulsoup4
+lxml_html_clean
+newspaper3k
+openpyxl
+pyinstaller
+pypinyin
+python-docx
+requests
+selenium
