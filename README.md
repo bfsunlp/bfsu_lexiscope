@@ -10,6 +10,7 @@
 - **BFSU ProofLens / OCR 识别与校对工具**
 - **BFSU AlignLens / 多语翻译对齐工具**
 - **BFSU WebLens / 网络语料检索与网页下载工具**
+- **BFSU ClearLens / BFSU 文本整理器**
 
 更多面向语料库采集、数据处理、统计分析、可视化和智能标注的模块正在规划和开发中，敬请期待。
 
@@ -21,8 +22,8 @@ BFSU LexiScope aims to provide a practical and research-oriented toolchain for c
 
 ```text
 web discovery / data collection → URL and source-page archiving
-→ metadata management → OCR/text digitization
-→ multilingual text alignment → text cleaning → corpus organization
+→ metadata management → OCR/text digitization → text cleaning
+→ multilingual text alignment → corpus organization
 → annotation → retrieval → statistical analysis → visualization
 ```
 
@@ -99,7 +100,7 @@ https://pan.baidu.com/s/1PO5hpRC0RogPcWPALNEjQw
 - 支持右键菜单、底部 `+ / -` 按钮和键盘 `Delete` 删除；
 - 支持所有主要滚动区域的鼠标中键滚轮滚动；
 - 支持简体中文、繁体中文、英语等识别语言设置；
-- 繁体中文采用非政治化内部代码 `zh_tr`；
+- 繁体中文采用项目统一内部代码 `zh_tra`；
 - 支持导出为 TXT、DOCX、XLSX、JSON、XML、Markdown；
 - 支持合并导出，也支持按源文件分别导出为 `源文件名_ocr.ext`。
 
@@ -219,26 +220,64 @@ BFSU_WebLens/
 
 ---
 
+### 1.5 BFSU ClearLens / BFSU 文本整理器
+
+**BFSU ClearLens** is a batch text organization, deterministic cleaning, encoding-conversion, and optional LLM-assisted review tool in the BFSU LexiScope framework. It is designed for text produced by OCR, web-content extraction, corpus collection, document conversion, and manual transcription. ClearLens imports text-bearing files and outputs organized text; it does not perform OCR, crawl websites, extract metadata, or split files.
+
+**BFSU ClearLens / BFSU 文本整理器** 面向 OCR 后文本、网页正文抽取结果、语料采集文件、格式转换文档和人工转写材料，主要用于批量文本整理、确定性降噪、编码转换、正则处理以及可选的大模型辅助校对。它只负责导入文本并输出整理后的文本，不执行 OCR、不抓取网页、不提取元信息，也不拆分文件。其核心工作流为：
+
+```text
+文件或文件夹导入 → 规则预览 → 确定性整理或大模型辅助处理
+→ 人工对照与校对 → 编码准备 → 显式保存 → 整理日志导出
+```
+
+#### Main Features / 主要功能
+
+- 支持单文件、多文件、文件夹递归和拖放导入，并提供文件队列增删、右键菜单和快捷键；
+- 文件发现、解码和批处理在后台运行，提供进度条、强制中止以及多进程/多线程设置；
+- 支持换行符、BOM、Unicode 规范化、乱码修复、HTML 实体还原、控制字符、零宽字符和双向控制字符处理；
+- 支持清除行首/行尾空白、重复空格、制表符、异常汉字间空格、全部空行和连续空行；
+- 支持相邻重复行、全文重复行、重复段落、异常符号行、重复短页眉页脚、OCR 占位符和重复标点处理；
+- 支持去除 Emoji，以及 JavaScript、CSS、`noscript`、`template` 等网页代码块；
+- 支持段内强制换行重排、英文断行连字符修复和段首缩进整理；
+- 支持全角与半角互转、繁简转换以及中文标点与半角标点转换；
+- 支持 UTF-8、UTF-16、UTF-32、GB18030、GBK、Big5、Shift-JIS、CP949、CP1252、Latin-1、ASCII 等编码间的严格转换；
+- 支持内置及自定义正则规则库、规则测试，并可让大模型根据自然语言需求提出正则表达式方案；
+- 支持将当前选项、自定义正则和大模型自然语言规则保存为独立 JSON 整理方案，便于重复使用；
+- 支持 OpenAI / ChatGPT 与 DeepSeek。大模型可执行受本机无损校验约束的安全整理，也可提出逐条或批量同意、拒绝的校对建议；
+- 规则、大模型、转码和人工编辑始终以上一次处理后的当前文本为输入，所有操作依次叠加；只有撤回、重做或恢复原文会还原状态；
+- 处理结果先保留在内存中。选择输出目录不会自动写出，只有“保存”“另存为”或“全部保存”才生成结果文件；
+- 支持清洗前后对照、差异视图、人工编辑、查找替换、字符统计、整理日志和最近 50 项单文件/多文件撤回重做；
+- 支持选择独立输出目录、保护源文件、保留原目录结构、合并选中文件和合并全部文件；
+- API 密钥默认只在当前会话中使用；仅在用户明确启用本机保存时写入本机设置，且不会导出到整理方案。
+
+#### Download / 下载
+
+**File / 文件名：** `BFSU_ClearLens.zip`
+
+**Windows Executable / Windows 可执行版：**
+
+https://pan.baidu.com/s/1Z-H233twN7OT57nKOs_aDQ
+
+**Extraction Code / 提取码：** `7h2n`
+
+#### Notes / 使用提示
+
+- 普通用户下载并解压后，应从完整发布目录运行 `BFSU_ClearLens.exe`，不要只移动 EXE 文件；
+- `assets`、`config`、`samples`、README 和依赖说明与 EXE 位于同级目录，Python 与第三方运行依赖位于 `_internal`；
+- 建议先选择与源文件目录分开的输出目录，检查规则预览和差异视图后再执行批处理；
+- 转码命令只在内存中登记目标编码并严格校验，仍需使用保存命令才会写出转换后的文件；
+- 大模型功能完全可选。涉及词句或语义的建议应由用户逐条核对，任何远程模型建议都不应视为绝对正确。
+
+---
+
 ## 2. Planned Tools / 规划中工具
 
 The following modules are planned or under consideration. They have not yet been fully implemented. Please stay tuned.
 
 以下模块仍在规划或开发中，尚未完整发布，敬请期待。
 
-### 2.1 Corpus Cleaner / 语料清洗工具
-
-Planned functions include:
-
-- 批量文本清洗；
-- 编码修复；
-- 空行、重复行、异常符号处理；
-- 段落重排；
-- OCR 噪音清理；
-- 正则规则库；
-- 清洗前后对比预览；
-- 清洗日志导出。
-
-### 2.2 Corpus Segmenter / 分词、分句与基础统计工具
+### 2.1 Corpus Segmenter / 分词、分句与基础统计工具
 
 Planned functions include:
 
@@ -249,7 +288,7 @@ Planned functions include:
 - 多语种基础文本指标；
 - Excel 日志导出。
 
-### 2.3 Corpus Analyzer / 语料库数据分析工具
+### 2.2 Corpus Analyzer / 语料库数据分析工具
 
 Planned functions include:
 
@@ -262,7 +301,7 @@ Planned functions include:
 - 统计检验；
 - 可视化图表导出。
 
-### 2.4 Corpus Visualizer / 语料库可视化工具
+### 2.3 Corpus Visualizer / 语料库可视化工具
 
 Planned functions include:
 
@@ -274,7 +313,7 @@ Planned functions include:
 - 多维分析结果可视化；
 - 适合论文发表的图表导出。
 
-### 2.5 LLM Corpus Assistant / 大模型语料库助手
+### 2.4 LLM Corpus Assistant / 大模型语料库助手
 
 Planned functions include:
 
@@ -295,29 +334,29 @@ Planned functions include:
 A typical BFSU LexiScope workflow may look like this:
 
 ```text
-1. Use BFSU WebLens to discover web/news URLs, archive source pages, extract multilingual clean text, and export search/download metadata.
-2. Use BFSU ProofLens to convert scanned PDFs or images into editable text.
-3. Proofread OCR results manually or with LLM assistance.
-4. Export clean text files.
+1. Use BFSU WebLens to discover web/news URLs, archive source pages, extract multilingual text, and export search/download metadata.
+2. Use BFSU ProofLens to convert scanned PDFs or images into editable text and review OCR output.
+3. Import web, OCR, converted, or transcribed text into BFSU ClearLens for deterministic cleaning, regular-expression processing, encoding conversion, and optional guarded LLM review.
+4. Inspect the cumulative working result, then explicitly save the cleaned files and cleaning logs.
 5. Use BFSU AlignLens to segment and align multilingual or translated texts.
-6. Export aligned files as Excel, TMX, XML, JSON or line-aligned TXT files.
+6. Export aligned files as Excel, TMX, XML, JSON, or line-aligned TXT files.
 7. Use BFSU MetaTools to create metadata schemas and records.
-8. Link web texts, OCR texts, or aligned files with metadata records.
-9. Use future LexiScope modules for cleaning, annotation, retrieval, statistics and visualization.
+8. Link web texts, OCR texts, cleaned texts, or aligned files with metadata records.
+9. Use future LexiScope modules for annotation, retrieval, statistics, and visualization.
 ```
 
 典型使用流程可以概括为：
 
 ```text
-1. 使用 BFSU WebLens 发现网络新闻或网页 URL，保存来源页面，抽取多语种干净文本，并导出检索与下载元信息；
-2. 使用 BFSU ProofLens 将扫描版 PDF 或图片转换为可编辑文本；
-3. 通过人工或大模型辅助方式校对 OCR 结果；
-4. 导出清理后的文本；
+1. 使用 BFSU WebLens 发现网络新闻或网页 URL，保存来源页面，抽取多语种文本，并导出检索与下载元信息；
+2. 使用 BFSU ProofLens 将扫描版 PDF 或图片转换为可编辑文本，并校对 OCR 结果；
+3. 将网页文本、OCR 文本、格式转换文本或人工转写文本导入 BFSU ClearLens，执行确定性整理、正则处理、编码转换和可选的受控大模型校对；
+4. 检查依次叠加的当前工作结果，再显式保存整理后的文件和整理日志；
 5. 使用 BFSU AlignLens 对多语文本、翻译文本或一本多译文本进行分段、分句和对齐；
 6. 将对齐结果导出为 Excel、TMX、XML、JSON 或按语种行号对齐的 TXT 文件；
 7. 使用 BFSU MetaTools 建立语料库元信息规范和记录；
-8. 将网页文本、OCR 文本或对齐文件与元信息记录关联；
-9. 后续使用 LexiScope 系列工具完成清洗、标注、检索、统计和可视化分析。
+8. 将网页文本、OCR 文本、整理后文本或对齐文件与元信息记录关联；
+9. 后续使用 LexiScope 系列工具完成标注、检索、统计和可视化分析。
 ```
 
 ---
@@ -363,27 +402,28 @@ python -m pip install -r requirements.txt
 pyinstaller --noconfirm --clean --onedir --windowed --name "BFSU_ToolName" --icon "assets\app.ico" main.py
 ```
 
-Each subtool may require additional `--add-data`, `--collect-submodules` and `--hidden-import` options. For model-heavy tools such as ProofLens and AlignLens, large model folders are usually copied manually into the packaged folder after PyInstaller packaging.
+Each subtool may require additional `--add-data`, `--collect-submodules` and `--hidden-import` options. For model-heavy tools such as ProofLens and AlignLens, large model folders are usually copied manually into the packaged folder after PyInstaller packaging. ClearLens uses an `onedir` layout in which runtime dependencies remain in `_internal`, while `assets`, `config`, `samples` and documentation remain beside the executable.
 
-不同子工具可能需要额外的 `--add-data`、`--collect-submodules` 和 `--hidden-import` 参数。对于 ProofLens 和 AlignLens 这类依赖模型的工具，较大的模型文件夹通常建议在 PyInstaller 打包完成后手动复制到打包目录中。
+不同子工具可能需要额外的 `--add-data`、`--collect-submodules` 和 `--hidden-import` 参数。对于 ProofLens 和 AlignLens 这类依赖模型的工具，较大的模型文件夹通常建议在 PyInstaller 打包完成后手动复制到打包目录中。ClearLens 采用 `onedir` 结构：运行依赖放在 `_internal`，`assets`、`config`、`samples` 和说明文档与 EXE 同级。
 
 ---
 
 ## 6. Data and Privacy / 数据与隐私
 
 - Local functions run on the user's computer.
-- Project files, metadata records, OCR results and alignment results are saved locally unless the user explicitly exports or uploads them.
+- Project files, metadata records, OCR results, ClearLens working texts and alignment results remain local unless the user explicitly saves, exports or uploads them.
 - LLM-assisted functions are optional.
 - If an API-based LLM is used, the selected text or prompt content may be sent to the configured API endpoint.
 - Users should avoid uploading confidential, sensitive or unpublished data to external APIs unless they have permission to do so.
 - API Keys should be stored locally and should not be committed to public repositories.
+- In ClearLens, selecting an output folder or running a cleaning command does not save a result file; only explicit save commands write the current working text to disk.
 
 ---
 
 ## 7. Notes / 注意事项
 
 - BFSU LexiScope is a research-support toolkit, not a fully automatic replacement for expert judgment.
-- OCR results, metadata extraction results, automatic alignment results and LLM suggestions should always be checked by the user.
+- OCR results, metadata extraction results, cleaned texts, automatic alignment results and LLM suggestions should always be checked by the user.
 - Users should verify exported texts, metadata and aligned files before using them in publications, teaching materials, corpus construction or statistical analysis.
 - Some functions are still experimental and may change between versions.
 - If a function has not yet been released, please treat its description as a development plan rather than a completed feature.
@@ -398,7 +438,7 @@ Planned development directions include:
 - 完善 OCR 与校对工作流；
 - 完善多语翻译对齐、对齐检查和语料导出工作流；
 - 增强大模型辅助语料处理能力；
-- 加入语料清洗和批处理工具；
+- 持续完善 ClearLens 的确定性规则、格式兼容、大模型安全校对和批量输出工作流；
 - 加入分词、分句和基础统计功能；
 - 加入词频、关键词、搭配和语块分析；
 - 加入论文级图表导出；
@@ -427,6 +467,6 @@ ChatGPT 5.5 contributed to the development process by assisting with code genera
 
 ## 10. Disclaimer / 免责声明
 
-BFSU LexiScope and its subtools are designed for research support, corpus construction and data processing. Automatically generated results, including OCR output, LLM-assisted proofreading, metadata extraction, automatic alignment and future statistical reports, may contain errors. Users are responsible for checking, revising and confirming all outputs before using them for academic publication, teaching, corpus release or formal research analysis.
+BFSU LexiScope and its subtools are designed for research support, corpus construction and data processing. Automatically generated results, including OCR output, deterministic or LLM-assisted text cleaning, LLM-assisted proofreading, metadata extraction, automatic alignment and future statistical reports, may contain errors. Users are responsible for checking, revising and confirming all outputs before using them for academic publication, teaching, corpus release or formal research analysis.
 
-BFSU LexiScope 及其子工具主要用于科研辅助、语料库建设和数据处理。自动生成结果，包括 OCR 文本、大模型辅助校对、元信息抽取、自动对齐结果以及未来的数据分析报告，均可能存在错误。用户在将相关结果用于论文发表、教学材料、语料库发布或正式研究分析前，应自行检查、修订并确认其准确性。
+BFSU LexiScope 及其子工具主要用于科研辅助、语料库建设和数据处理。自动生成结果，包括 OCR 文本、确定性或大模型辅助文本整理、大模型校对建议、元信息抽取、自动对齐结果以及未来的数据分析报告，均可能存在错误。用户在将相关结果用于论文发表、教学材料、语料库发布或正式研究分析前，应自行检查、修订并确认其准确性。
