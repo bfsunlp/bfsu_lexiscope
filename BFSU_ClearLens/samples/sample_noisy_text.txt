@@ -1,0 +1,13 @@
+﻿This  is   a sample OCR/web text.
+
+
+1
+This line is duplicated.
+This line is duplicated.
+The quick brown fox jumps over the lazy dog-
+and continues on the next line.
+
+中 文 之 间 出 现 了 异 常 空 格。
+@@@@@#####!!!!!
+https://example.com
+

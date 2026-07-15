@@ -1,0 +1,122 @@
+[
+  {
+    "key": "decorative_separators",
+    "category": "symbols",
+    "name": {"en": "Remove decorative separators", "zh_sim": "去除装饰分隔线", "zh_tra": "去除裝飾分隔線"},
+    "description": {"en": "Remove lines made only of repeated underline, dash, equals, or star characters.", "zh_sim": "去除只包含下划线、横线、等号或星号的装饰行。", "zh_tra": "去除只包含底線、橫線、等號或星號的裝飾行。"},
+    "pattern": "^\\s*[_\\-—=＊*·•]{4,}\\s*$",
+    "replacement": "",
+    "flags": "m",
+    "enabled": true
+  },
+  {
+    "key": "arabic_page_numbers",
+    "category": "pages",
+    "name": {"en": "Remove standalone page numbers", "zh_sim": "去除独立页码", "zh_tra": "去除獨立頁碼"},
+    "description": {"en": "Remove lines containing only an Arabic page number.", "zh_sim": "去除只包含阿拉伯数字页码的行。", "zh_tra": "去除只包含阿拉伯數字頁碼的行。"},
+    "pattern": "^\\s*[-—]?\\s*\\d{1,6}\\s*[-—]?\\s*$",
+    "replacement": "",
+    "flags": "m",
+    "enabled": false
+  },
+  {
+    "key": "chinese_page_labels",
+    "category": "pages",
+    "name": {"en": "Remove Chinese page labels", "zh_sim": "去除中文页码行", "zh_tra": "去除中文頁碼行"},
+    "description": {"en": "Remove lines such as '第 3 页' or '第 3 页 / 共 10 页'.", "zh_sim": "去除“第3页”或“第3页/共10页”等行。", "zh_tra": "去除「第3頁」或「第3頁/共10頁」等行。"},
+    "pattern": "^\\s*第?\\s*[0-9一二三四五六七八九十百千]+\\s*页(?:\\s*[/／]\\s*共?\\s*[0-9一二三四五六七八九十百千]+\\s*页)?\\s*$",
+    "replacement": "",
+    "flags": "m",
+    "enabled": false
+  },
+  {
+    "key": "html_tags",
+    "category": "markup",
+    "name": {"en": "Remove HTML/XML tags", "zh_sim": "去除 HTML/XML 标签", "zh_tra": "去除 HTML/XML 標籤"},
+    "description": {"en": "Remove simple markup tags while keeping their text content.", "zh_sim": "去除简单标记标签并保留其中的文本。", "zh_tra": "去除簡單標記標籤並保留其中的文本。"},
+    "pattern": "<[^>]+>",
+    "replacement": "",
+    "flags": "s",
+    "enabled": false
+  },
+  {
+    "key": "url_only_lines",
+    "category": "web",
+    "name": {"en": "Remove URL-only lines", "zh_sim": "去除纯网址行", "zh_tra": "去除純網址行"},
+    "description": {"en": "Remove lines whose only content is a URL.", "zh_sim": "去除内容仅为网址的行。", "zh_tra": "去除內容僅為網址的行。"},
+    "pattern": "^\\s*(?:https?://|www\\.)\\S+\\s*$",
+    "replacement": "",
+    "flags": "im",
+    "enabled": false
+  },
+  {
+    "key": "web_navigation",
+    "category": "web",
+    "name": {"en": "Remove common web navigation", "zh_sim": "去除常见网页导航行", "zh_tra": "去除常見網頁導覽行"},
+    "description": {"en": "Remove common previous/next/top/share/print navigation lines.", "zh_sim": "去除上一篇、下一篇、返回顶部、分享、打印等常见导航行。", "zh_tra": "去除上一篇、下一篇、返回頂部、分享、列印等常見導覽行。"},
+    "pattern": "^\\s*(?:上一篇|下一篇|返回顶部|回到顶部|分享到|打印本文|列印本文|previous|next|back to top|share|print)\\s*[:：]?.*$",
+    "replacement": "",
+    "flags": "im",
+    "enabled": false
+  },
+  {
+    "key": "copyright_lines",
+    "category": "web",
+    "name": {"en": "Remove copyright boilerplate", "zh_sim": "去除版权模板行", "zh_tra": "去除版權範本行"},
+    "description": {"en": "Remove lines beginning with common copyright boilerplate.", "zh_sim": "去除以常见版权提示开头的模板行。", "zh_tra": "去除以常見版權提示開頭的範本行。"},
+    "pattern": "^\\s*(?:copyright|©|版权所有|版權所有|all rights reserved).*$",
+    "replacement": "",
+    "flags": "im",
+    "enabled": false
+  },
+  {
+    "key": "cookie_notices",
+    "category": "web",
+    "name": {"en": "Remove cookie notice lines", "zh_sim": "去除 Cookie 提示行", "zh_tra": "去除 Cookie 提示行"},
+    "description": {"en": "Remove short, common cookie-consent lines.", "zh_sim": "去除常见的简短 Cookie 同意提示。", "zh_tra": "去除常見的簡短 Cookie 同意提示。"},
+    "pattern": "^\\s*(?:accept all cookies|cookie settings|we use cookies|接受所有 cookie|cookie 设置|本网站使用 cookie).*$",
+    "replacement": "",
+    "flags": "im",
+    "enabled": false
+  },
+  {
+    "key": "empty_brackets",
+    "category": "symbols",
+    "name": {"en": "Remove empty bracket artifacts", "zh_sim": "去除空括号残片", "zh_tra": "去除空括號殘片"},
+    "description": {"en": "Remove lines containing only empty brackets or brackets around punctuation.", "zh_sim": "去除只包含空括号或括号内仅有标点的行。", "zh_tra": "去除只包含空括號或括號內僅有標點的行。"},
+    "pattern": "^\\s*[\\[【(（<《]\\s*[,，.。:：;；-]*\\s*[\\]】)）>》]\\s*$",
+    "replacement": "",
+    "flags": "m",
+    "enabled": false
+  },
+  {
+    "key": "timestamp_only_lines",
+    "category": "web",
+    "name": {"en": "Remove timestamp-only lines", "zh_sim": "去除纯时间戳行", "zh_tra": "去除純時間戳行"},
+    "description": {"en": "Remove lines containing only a date and optional time.", "zh_sim": "去除只包含日期及可选时间的行。", "zh_tra": "去除只包含日期及可選時間的行。"},
+    "pattern": "^\\s*\\d{4}[-/.年]\\d{1,2}[-/.月]\\d{1,2}日?(?:\\s+\\d{1,2}:\\d{2}(?::\\d{2})?)?\\s*$",
+    "replacement": "",
+    "flags": "m",
+    "enabled": false
+  },
+  {
+    "key": "markdown_image_lines",
+    "category": "markup",
+    "name": {"en": "Remove Markdown image-only lines", "zh_sim": "去除 Markdown 图片行", "zh_tra": "去除 Markdown 圖片行"},
+    "description": {"en": "Remove lines consisting only of a Markdown image reference.", "zh_sim": "去除仅包含 Markdown 图片引用的行。", "zh_tra": "去除僅包含 Markdown 圖片引用的行。"},
+    "pattern": "^\\s*!\\[[^\\]]*\\]\\([^)]*\\)\\s*$",
+    "replacement": "",
+    "flags": "m",
+    "enabled": false
+  },
+  {
+    "key": "ocr_symbol_runs",
+    "category": "symbols",
+    "name": {"en": "Remove OCR symbol runs", "zh_sim": "去除 OCR 符号串", "zh_tra": "去除 OCR 符號串"},
+    "description": {"en": "Remove long runs of common OCR placeholder symbols.", "zh_sim": "去除较长的常见 OCR 占位符号串。", "zh_tra": "去除較長的常見 OCR 佔位符號串。"},
+    "pattern": "[□■◆◇�]{3,}",
+    "replacement": "",
+    "flags": "",
+    "enabled": false
+  }
+]

@@ -1,0 +1,75 @@
+{
+  "language": "zh_sim",
+  "output": {
+    "directory": "clearlens_output",
+    "encoding": "utf-8",
+    "newline": "lf",
+    "clean_suffix": "_cleaned",
+    "converted_suffix": "_converted",
+    "preserve_folders": true,
+    "overwrite_existing": false
+  },
+  "import": {
+    "recursive": true
+  },
+  "processing": {
+    "parallel_enabled": true,
+    "use_multiprocessing": true,
+    "max_workers": 0,
+    "preview_max_chars": 200000
+  },
+  "editor": {
+    "font_size": 11
+  },
+  "local_cleaning": {
+    "normalize_newlines": true,
+    "strip_bom": true,
+    "unicode_normalization": "NFC",
+    "fix_mojibake": false,
+    "remove_control_chars": true,
+    "remove_zero_width_chars": true,
+    "remove_private_use_chars": false,
+    "remove_emoji": false,
+    "remove_web_code_blocks": false,
+    "decode_html_entities": false,
+    "strip_leading_whitespace": false,
+    "trim_lines": true,
+    "normalize_spaces": true,
+    "tabs_to_spaces": true,
+    "tab_size": 4,
+    "fix_cjk_spacing": true,
+    "width_conversion": "none",
+    "chinese_conversion": "none",
+    "punctuation_mode": "none",
+    "remove_empty_lines": false,
+    "collapse_blank_lines": true,
+    "dedupe_adjacent_lines": true,
+    "dedupe_all_lines": false,
+    "dedupe_paragraphs": false,
+    "remove_abnormal_symbol_lines": true,
+    "remove_repeated_short_lines": false,
+    "remove_ocr_placeholders": false,
+    "normalize_repeated_punctuation": false,
+    "paragraph_reflow": false,
+    "paragraph_indent_mode": "keep",
+    "repair_hyphenated_linebreaks": true,
+    "ensure_final_newline": false
+  },
+  "thresholds": {
+    "abnormal_symbol_ratio": 0.65,
+    "min_line_length_for_symbol_check": 8
+  },
+  "ai": {
+    "enabled": false,
+    "provider": "openai",
+    "openai_model": "gpt-5.4-mini",
+    "deepseek_model": "deepseek-v4-flash",
+    "reasoning_effort": "low",
+    "max_chars_per_request": 30000,
+    "max_output_tokens": 8000,
+    "confirm_before_send": true,
+    "remember_api_key": false,
+    "openai_api_key": "",
+    "deepseek_api_key": ""
+  }
+}

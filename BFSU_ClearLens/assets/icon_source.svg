@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#174a7e"/>
+  <circle cx="218" cy="204" r="136" fill="none" stroke="#18bfb5" stroke-width="30"/>
+  <line x1="314" y1="300" x2="416" y2="402" stroke="#18bfb5" stroke-width="30" stroke-linecap="square"/>
+  <line x1="145" y1="151" x2="291" y2="151" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+  <line x1="145" y1="204" x2="198" y2="204" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+  <line x1="238" y1="204" x2="291" y2="204" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+  <line x1="145" y1="257" x2="291" y2="257" stroke="#ffffff" stroke-width="18" stroke-linecap="round"/>
+  <text x="42" y="468" fill="#ffffff" font-family="Arial, sans-serif" font-size="48" font-weight="700">BFSU</text>
+</svg>
