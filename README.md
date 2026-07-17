@@ -157,66 +157,110 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 **Extraction Code / 提取码：** `ihjx`
 
 
-### 1.4 BFSU WebLens / 网络语料检索与网页下载工具
+### 1.4 BFSU WebLens v1.2.8 / 网络语料检索与网页下载工具
 
-**BFSU WebLens** is a conservative web-search, URL discovery, source-page downloading, and multilingual text-cleaning tool for corpus construction and web-based discourse research. It is designed for researchers who need traceable search-result collection rather than high-frequency crawling. WebLens currently provides separated Google and Baidu panels, auditable query metadata, result preview, sampling, export, source-page downloading, multilingual encoding repair, clean TXT output, and content-download breakpoint continuation.
+**BFSU WebLens v1.2.8** is a conservative web-search, URL discovery, source-page downloading, and multilingual text-extraction tool for corpus construction and web-based discourse research. It is designed for researchers who need low-frequency, auditable collection rather than high-frequency crawling. WebLens provides separated Google and Baidu workflows, traceable query metadata, result preview and sampling, source-page downloading, multilingual encoding repair, clean-text output, and breakpoint continuation for content downloads.
 
-**BFSU WebLens / 网络语料检索与网页下载工具** 面向网络语料库建设、新闻语料采集、语料库话语研究、国际传播研究、翻译与传媒研究中的网页材料准备。它不是高频爬虫，而是一个低频、保守、可审计的网页检索和正文下载工具，重点解决“如何可追溯地获得搜索结果 URL、保存来源网页、抽取多语种正文、导出语料库建设所需元信息”等问题。其核心工作流为：
+**BFSU WebLens v1.2.8 / 网络语料检索与网页下载工具** 面向网络语料库建设、新闻语料采集、语料库话语研究、国际传播研究、翻译与传媒研究中的网页材料准备。它不是高频爬虫，而是一款强调低频、保守、可审计和可追溯的网络语料发现与正文下载工具，重点解决搜索结果 URL 获取、查询过程记录、网页正文抽取、多语种编码修复、语料文本保存以及来源元信息导出等问题。其核心工作流为：
 
 ```text
 检索设置 → Google / 百度低频检索 → URL 结果预览与去重
-→ 抽样或人工编辑 → 多格式导出 → 正文下载
+→ 抽样、排序或人工编辑 → 多格式导出 → 正文下载
 → 多语种编码修复与正文清洗 → 语料 TXT 与 metadata 保存
 ```
 
-#### Main Features / 主要功能
+#### Interface and Interaction / 界面与交互
 
-- 独立的 Google 和百度面板，两个搜索引擎的设置、日志、结果预览、导出和下载互不混合；
+- 保留传统桌面软件布局和传统菜单栏，Google / 百度标签页、左侧设置区、右侧结果预览区和日志区的整体工作流不变；
+- 主界面和应用内对话框优先采用 **CustomTkinter**，框架、分组面板、按钮、输入框、下拉框、复选框、多行文本框、进度条、标签页、可拖动分栏和日期控件均使用 CTk 风格；
+- 仅传统菜单、结果 `Treeview`、多选 `Listbox` 等 CustomTkinter 无直接替代的组件继续使用 Tk/ttk，并统一应用 LexiScope 配色和 DPI 指标；
+- 界面配色、边框、圆角、字体节奏、控件高度和布局间距与 **BFSU ClearLens / LexiScope** 视觉风格保持一致；
+- 左侧设置栏采用可滚动 CTk 面板。鼠标位于设置区任意位置时均可直接使用滚轮，包括检索词文本框、域名输入框以及语种和国家/地区列表；
+- Google / 百度标签压缩并放置在左上角，为结果预览和日志区域保留更多垂直空间；
+- 启动时适当增加左侧设置区宽度，减少按钮、标签和输入控件显示不完整的问题；
+- Result Preview 工具栏划分为带边框的 **记录操作、排序、采样、正文下载** 四个功能区，避免不同用途的按钮混排；
+- 顶部工具栏提供 **Open downloads / 打开下载文件夹**，可创建并打开当前面板所设置的正文下载目录；
+- 重新绘制与 ClearLens 一致的 WebLens 高清图标，并提供 16–256 px 多分辨率 ICO 和专用小尺寸 PNG，提高 Windows 标题栏与任务栏图标清晰度；
+- 关于、说明、设置、正文下载设置和日期选择等窗口均使用统一图标和 CTk 风格。
+
+#### Windows 11 DPI and Window Positioning / Windows 11 缩放与窗口定位
+
+- 在创建界面前启用 Windows 11 每显示器 DPI 感知，适配高分辨率显示器和 125%、150%、175%、200%、225% 等缩放比例；
+- 原生菜单和 Treeview 使用 DPI 适配后的字体与行高；
+- 主窗口和各子窗口会根据 Windows 可用工作区自动限制初始尺寸，避免打开后只显示局部；
+- v1.2.8 修正了窗口反复自动回到启动位置的问题：主窗口仅在启动时定位一次，后台任务轮询不再重复调用居中函数，因此用户可以自由拖动窗口；
+- 窗口定位区分 CustomTkinter 逻辑尺寸与显示器物理像素，并扣除 Windows 任务栏占用区域，避免窗口右侧或底部藏到桌面之外。
+
+#### Search and Collection / 检索与采集
+
+- Google 和百度采用独立面板，两个搜索引擎的设置、日志、结果预览、采样、导出和正文下载互不混合；
 - Google 支持普通网页检索与 Google News 检索；
-- Google 支持检索辅助模式，包括单词、任一词 / OR、全部词、精确短语、任一精确短语 / OR 和原始检索式；
-- Google 支持结果语种限制、国家 / 地区限制、站点 / 域名限制和日期范围检索；
+- Google 支持单词、任一词 / OR、全部词、精确短语、任一精确短语 / OR 和原始检索式等查询辅助模式；
+- Google 支持结果语种、国家/地区、站点/域名以及日期范围限定；
+- Google 的 **Results per page / 每页结果数** 默认值为 **10**，并写入 `config/default_settings.json`；旧版仍保留原默认值 50 的设置会自动迁移为 10；
 - 百度支持百度网页、百度资讯和百度资讯媒体网站；
-- 百度支持通过 `site:{domain}` 形式限定来源网站，通过 `gpc=stf=...|stftype=2` 与 `tfflag=1` 实现日期范围筛选，通过 `medium=1` 筛选媒体资讯结果；
-- Google 与百度均支持多行站点 / 域名限定，每行可填写一个域名、域名后缀或 `site:` 表达式；
-- 支持 requests、Selenium Chrome、Selenium Edge 等检索方式，并提供页面延时、切片延时、错误冷却、浏览器定期重启等参数；
-- 支持保守的低频访问策略，默认页面延时较长，便于降低访问压力并提高页面加载完整性；
-- 支持搜索结果预览、去重、采样、撤销、重做、重置和人工编辑；
-- 支持导出 XLSX、CSV、TXT、DOCX、XML 等格式，其中 XLSX 适合保存语料库建设日志和元信息；
-- 支持对已爬取或导入的链接进行正文下载，下载模式可选 requests、Selenium 或二者混合；
-- 正文下载支持多线程、失败重试、单条任务超时、停止下载、同域名串行控制和内容下载断点续传；
-- 断点续传只用于正文下载，不用于搜索结果爬取，以避免软件在用户不知情的情况下继续访问搜索引擎；
+- 百度通过 `site:{domain}` 限定来源网站，通过 `gpc=stf=...|stftype=2` 与 `tfflag=1` 实现日期范围过滤，并可使用 `medium=1` 筛选媒体资讯结果；
+- Google 与百度均支持多行站点/域名限定，每行可填写一个域名、域名后缀或 `site:` 表达式；
+- 支持 requests、Selenium Chrome 和 Selenium Edge 等检索方式，并提供页面延时、切片延时、错误冷却和浏览器定期重启等参数；
+- 默认采用较长的低频访问延时，便于降低访问压力并提高页面加载完整性；
+- 当 Selenium 遇到 Google 人机验证页面时，WebLens 会保留当前浏览器并暂停自动翻页，允许用户手动完成验证；验证页面消失后可继续解析和采集；
+- 支持连续无新增页面自动停止，避免 Home、Map 等重复导航链接导致任务无法结束。
+
+#### Result Management and Export / 结果管理与导出
+
+- 支持搜索结果预览、去重、排序、人工编辑、撤销、重做和恢复初始采集结果；
+- 支持简单随机抽样、系统抽样以及按来源分层抽样；
+- 支持导入已有链接，并对导入或采集结果执行正文下载；
+- 支持导出 XLSX、CSV、TXT、DOCX 和 XML；
+- 元信息字段尽量保存查询词、标题、URL、摘要、来源域名、作者、出版机构、地点、发布时间、抓取时间、日期切片和搜索引擎等信息；
+- XLSX 适合用作网络语料库建设日志和来源元信息表。
+
+#### Content Download and Text Extraction / 正文下载与文本抽取
+
+- 正文下载模式可选 requests、Selenium 或混合模式；
+- 支持多线程、失败重试、单条任务超时、停止下载、同域名串行控制和下载进度显示；
+- 支持正文下载断点续传：成功记录即时写入 `content_manifest.jsonl`，重新选择同一下载目录和同一批 URL 时会跳过已完成项目；
+- 断点续传仅用于正文下载，不用于搜索结果采集，避免软件在用户不知情的情况下继续访问搜索引擎；
 - 多语种正文抽取采用分层降级策略，包括原始字节保存、编码自动检测、乱码修复、`newspaper3k`、站点模板、`article/main/content` 候选区、可见文本抽取和 clean TXT 输出；
-- 对中文新闻网页进行了增强兼容，包括常见 mojibake 乱码修复和若干中文新闻站点正文模板；
-- 打包版采用 PyInstaller `onedir` 结构，`BFSU_WebLens.exe` 位于发布目录外层，依赖和资源位于 `_internal` 文件夹中；
-- 根目录 `preinstall` 文件夹中可放置与内置 ChromeDriver / EdgeDriver 适配的浏览器安装包，便于用户配置 Selenium 后端。
+- 对中文新闻网页和常见 mojibake 乱码进行了增强兼容；
+- 下载结果可保存正文文本、原始页面、下载状态和对应 metadata，便于后续导入 BFSU ClearLens、MetaTools 或其它语料库处理流程。
 
-#### Download / 下载
+#### Packaging / 打包结构
 
-**File / 文件名：** `BFSU_WebLens.zip`
-
-**Windows Executable / Windows 可执行版：**
-
-https://pan.baidu.com/s/1UFnlZqa8PsA3TDZDqQfe0g
-
-**Extraction Code / 提取码：** `s4mp`
-
-#### Notes / 使用提示
-
-- 普通用户建议下载 Windows 可执行版，解压后运行 `BFSU_WebLens.exe`。
-- 发布版通常采用如下结构，请不要把 exe 单独移出文件夹运行：
+WebLens 采用 PyInstaller `onedir` 发布结构。普通用户应完整解压后，从发布目录运行 `BFSU_WebLens.exe`，不要单独移动 EXE 文件。
 
 ```text
 BFSU_WebLens/
   BFSU_WebLens.exe
   README.md
   requirements.txt
+  config/
+  assets/
   preinstall/
   _internal/
 ```
 
-- 如果使用 Selenium Chrome 或 Selenium Edge 模式，建议安装发布包根目录 `preinstall` 文件夹中的浏览器安装包，以适配已有的 ChromeDriver / EdgeDriver 和 Selenium 环境。
-- 如果只使用 requests 后端，通常不需要安装额外浏览器。
-- WebLens 仅用于合法、低频、研究导向的网页发现和语料准备。用户应自行遵守网站服务条款、robots/访问政策、版权、隐私、访问频率限制以及相关法律法规。
+`requirements.txt` 明确包含 `customtkinter` 和 `pillow`；打包脚本会收集 CustomTkinter、图标资源、配置文件、Selenium 支持和正文抽取依赖。
+
+#### Download / 下载
+
+**Current Release / 当前版本：** `BFSU WebLens v1.2.8`
+
+**File / 文件名：** `BFSU_WebLens_v1.2.8.zip`
+
+**Baidu Netdisk / 百度网盘：**
+
+https://pan.baidu.com/s/1UXTRIJpFbXJnMCHMTxbWPA?pwd=kvst
+
+**Extraction Code / 提取码：** `kvst`
+
+#### Notes / 使用提示
+
+- 下载后请完整解压，并保持主程序、`_internal`、`assets`、`config` 和其它配套文件的相对位置不变；
+- 如果使用 Selenium Chrome 或 Selenium Edge，可根据发布包说明准备兼容的浏览器和驱动；
+- 如果只使用 requests 后端，通常不需要安装额外浏览器；
+- WebLens 仅用于合法、低频、研究导向的网页发现和语料准备；
+- 用户应自行遵守目标网站的服务条款、robots/访问政策、版权、隐私、访问频率限制以及相关法律法规。
 
 ---
 
