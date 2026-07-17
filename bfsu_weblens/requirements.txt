@@ -1,3 +1,5 @@
+customtkinter
+pillow
 beautifulsoup4
 lxml_html_clean
 newspaper3k

@@ -103,9 +103,12 @@ echo.
   --name "%APP_NAME%" ^
   --icon "assets\app.ico" ^
   --add-data "assets;assets" ^
+  --add-data "config;config" ^
   --add-data "tools;tools" ^
   --collect-all selenium ^
   --collect-submodules selenium ^
+  --collect-all customtkinter ^
+  --collect-submodules customtkinter ^
   --collect-submodules newspaper ^
   --collect-data newspaper ^
   --collect-data tldextract ^
@@ -143,6 +146,7 @@ echo [INFO] Copying release documentation and auxiliary files...
 if exist README.md copy /Y README.md "dist\%APP_NAME%\README.md" >nul
 if exist requirements.txt copy /Y requirements.txt "dist\%APP_NAME%\requirements.txt" >nul
 if exist run.bat copy /Y run.bat "dist\%APP_NAME%\run_source_mode.bat" >nul
+if exist config xcopy /E /I /Y config "dist\%APP_NAME%\config" >nul
 if exist tools (
     if not exist "dist\%APP_NAME%\_internal\tools" mkdir "dist\%APP_NAME%\_internal\tools"
     xcopy /E /I /Y tools "dist\%APP_NAME%\_internal\tools" >nul

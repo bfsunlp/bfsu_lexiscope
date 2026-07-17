@@ -1348,6 +1348,186 @@ def create_selenium_driver(cfg: CollectorConfig):
         return webdriver.Chrome(service=service, options=options)
     return webdriver.Chrome(options=options)
 
+
+MANUAL_VERIFICATION_POLL_SECONDS = 2.0
+MANUAL_VERIFICATION_LOG_SECONDS = 15.0
+MANUAL_VERIFICATION_CLEAR_CONFIRMATIONS = 2
+
+
+def _selenium_page_snapshot(driver, fallback_url: str = "") -> tuple[str, str]:
+    """Read the currently displayed browser page without navigating anywhere."""
+    html_text = driver.page_source or ""
+    current_url = getattr(driver, "current_url", fallback_url) or fallback_url
+    return html_text, current_url
+
+
+def _google_verification_cleared_candidate(html_text: str, current_url: str) -> bool:
+    """Return True when the visible browser appears to have left verification.
+
+    The check is intentionally conservative. Merely seeing a transient blank page
+    is not enough: the browser must be on a Google search page (or expose normal
+    result/no-result markers) and no verification markers may remain.
+    """
+    if looks_like_google_block_html(html_text, current_url):
+        return False
+
+    if _has_result_card_markers(html_text):
+        return True
+
+    lower = (html_text or "").lower()
+    no_result_markers = (
+        "did not match any documents",
+        "no results found",
+        "找不到和您查询",
+        "找不到和您查詢",
+        "没有任何结果",
+        "沒有任何結果",
+    )
+    if any(marker in lower for marker in no_result_markers):
+        return True
+
+    try:
+        parsed = urlparse(current_url or "")
+        host = (parsed.hostname or "").lower()
+        path = (parsed.path or "").lower()
+    except Exception:
+        return False
+
+    google_host = host == "google.com" or host.endswith(".google.com")
+    # Require a reasonably complete Google search page. This avoids treating a
+    # short-lived blank/redirect document as successful verification.
+    return bool(google_host and path.startswith("/search") and len(html_text or "") >= 1500)
+
+
+def _refresh_current_selenium_page(
+    driver,
+    cfg: CollectorConfig,
+    stop_checker: Callable[[], bool] | None = None,
+) -> tuple[str, str]:
+    """Refresh the current page once after manual verification has cleared."""
+    try:
+        from selenium.webdriver.support.ui import WebDriverWait
+    except Exception as exc:
+        raise NetworkAccessError("Selenium is not available. Install it with: pip install selenium") from exc
+
+    if stop_checker and stop_checker():
+        raise StopCrawl()
+
+    driver.refresh()
+    try:
+        WebDriverWait(driver, max(1, int(cfg.timeout_seconds))).until(
+            lambda d: d.execute_script("return document.readyState") in {"interactive", "complete"}
+        )
+    except Exception:
+        # Keep the current DOM for diagnostics even if readyState times out.
+        pass
+
+    wait_ms = max(0, int(getattr(cfg, "browser_wait_ms", 3500) or 0))
+    if wait_ms:
+        sleep_random_ms(wait_ms, wait_ms, stop_checker)
+    return _selenium_page_snapshot(driver)
+
+
+def wait_for_manual_google_verification(
+    driver,
+    cfg: CollectorConfig,
+    stop_checker: Callable[[], bool] | None = None,
+    page_number: int | None = None,
+    initial_url: str = "",
+):
+    """Pause crawling while the user completes Google's visible verification.
+
+    During the wait loop this function never calls ``get()``, ``refresh()``,
+    ``back()``, ``forward()``, or opens another URL. It only reads ``current_url``
+    and ``page_source`` at a small interval. Once the normal result page remains
+    visible for consecutive checks, the current page is refreshed exactly once.
+    If verification reappears after that refresh, the function enters the wait
+    state again and performs no further navigation until the user passes it.
+    """
+    poll_seconds = max(
+        0.5,
+        float(getattr(cfg, "manual_verification_poll_seconds", MANUAL_VERIFICATION_POLL_SECONDS)
+              or MANUAL_VERIFICATION_POLL_SECONDS),
+    )
+    poll_ms = max(500, int(poll_seconds * 1000))
+    page_hint = f" on page {page_number}" if page_number else ""
+    wait_round = 0
+
+    while True:
+        wait_round += 1
+        try:
+            _, current_url = _selenium_page_snapshot(driver, initial_url)
+        except Exception as exc:
+            raise NetworkAccessError(
+                "The Selenium browser was closed or became unavailable while waiting for manual verification."
+            ) from exc
+
+        yield CrawlEvent(
+            "verification_wait",
+            f"Google verification detected{page_hint}. Crawling is paused on the current browser page. "
+            f"Complete the verification manually; WebLens will check every {poll_seconds:g} seconds. "
+            "No refresh or new page will be loaded while verification is still present.",
+            data={"page_number": page_number, "url": current_url, "poll_seconds": poll_seconds, "round": wait_round},
+        )
+
+        clear_streak = 0
+        last_heartbeat = time.monotonic()
+        while True:
+            if stop_checker and stop_checker():
+                raise StopCrawl()
+
+            try:
+                html_text, current_url = _selenium_page_snapshot(driver, initial_url)
+            except Exception as exc:
+                raise NetworkAccessError(
+                    "The Selenium browser was closed or became unavailable while waiting for manual verification."
+                ) from exc
+
+            if _google_verification_cleared_candidate(html_text, current_url):
+                clear_streak += 1
+            else:
+                clear_streak = 0
+
+            if clear_streak >= MANUAL_VERIFICATION_CLEAR_CONFIRMATIONS:
+                yield CrawlEvent(
+                    "log",
+                    "Manual verification appears to be complete. Refreshing the current page once before resuming parsing.",
+                )
+                try:
+                    refreshed_html, refreshed_url = _refresh_current_selenium_page(driver, cfg, stop_checker)
+                except StopCrawl:
+                    raise
+                except Exception as exc:
+                    raise NetworkAccessError(
+                        f"Could not refresh the browser after manual verification: {exc}"
+                    ) from exc
+
+                if looks_like_google_block_html(refreshed_html, refreshed_url):
+                    yield CrawlEvent(
+                        "log",
+                        "Google verification reappeared after the automatic refresh. WebLens will remain on this page and wait again.",
+                    )
+                    initial_url = refreshed_url or initial_url
+                    break
+
+                yield CrawlEvent(
+                    "verification_passed",
+                    "Manual verification passed. The current page was refreshed once and crawling will now resume.",
+                    data={"page_number": page_number, "url": refreshed_url},
+                )
+                return refreshed_html, refreshed_url
+
+            now = time.monotonic()
+            if now - last_heartbeat >= MANUAL_VERIFICATION_LOG_SECONDS:
+                yield CrawlEvent(
+                    "log",
+                    f"Still waiting for manual Google verification{page_hint}. The current page is being preserved without navigation.",
+                )
+                last_heartbeat = now
+
+            sleep_random_ms(poll_ms, poll_ms, stop_checker)
+
+
 def fetch_html_with_selenium(driver, url: str, cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) -> tuple[str, str]:
     """Load a Google result page in a real browser and return page_source.
 
@@ -1481,8 +1661,15 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                         raise NetworkAccessError(str(exc)) from exc
                     if looks_like_google_block_html(html_text, final_url):
                         debug_path = save_debug_html_if_needed(cfg, html_text, shard_start, shard_end, page_number)
-                        yield CrawlEvent("blocked", f"Google block / verification page detected in browser backend. Debug HTML saved to: {debug_path}")
-                        return
+                        yield CrawlEvent("log", f"Google verification page detected in browser backend. Debug HTML saved to: {debug_path}")
+                        html_text, final_url = yield from wait_for_manual_google_verification(
+                            driver,
+                            cfg,
+                            stop_checker=stop_checker,
+                            page_number=page_number,
+                            initial_url=final_url,
+                        )
+                        yield CrawlEvent("log", f"Resuming page {page_number} after manual verification. final_url={final_url}; html_len={len(html_text)}")
                 else:
                     resp = None
                     page_headers = build_browser_headers(cfg.user_agent, referer=last_referer)
@@ -1549,6 +1736,17 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                                 driver = start_selenium_driver(page_number)
                                 yield CrawlEvent("log", f"Selenium {backend_name} browser restarted for empty-page retry on page {page_number}.")
                             html_text, final_url = fetch_html_with_selenium(driver, url, cfg, stop_checker)
+                            if looks_like_google_block_html(html_text, final_url):
+                                debug_path = save_debug_html_if_needed(cfg, html_text, shard_start, shard_end, page_number)
+                                yield CrawlEvent("log", f"Google verification page detected during empty-page retry. Debug HTML saved to: {debug_path}")
+                                html_text, final_url = yield from wait_for_manual_google_verification(
+                                    driver,
+                                    cfg,
+                                    stop_checker=stop_checker,
+                                    page_number=page_number,
+                                    initial_url=final_url,
+                                )
+                                yield CrawlEvent("log", f"Resuming empty-page retry for page {page_number} after manual verification.")
                         else:
                             retry_headers = build_browser_headers(cfg.user_agent, referer=last_referer)
                             resp = session.get(url, headers=retry_headers, timeout=cfg.timeout_seconds)

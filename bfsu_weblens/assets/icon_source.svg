@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#174a7e"/>
+  <!-- ClearLens/LexiScope magnifying-lens silhouette -->
+  <circle cx="218" cy="204" r="136" fill="none" stroke="#18bfb5" stroke-width="30"/>
+  <line x1="314" y1="300" x2="416" y2="402" stroke="#18bfb5" stroke-width="30" stroke-linecap="square"/>
+  <!-- WebLens globe: intentionally bold for 16–256 px Windows icons -->
+  <circle cx="218" cy="204" r="82" fill="none" stroke="#ffffff" stroke-width="14"/>
+  <path d="M136 204 H300" fill="none" stroke="#ffffff" stroke-width="12" stroke-linecap="round"/>
+  <path d="M151 161 Q218 188 285 161" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M151 247 Q218 220 285 247" fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round"/>
+  <path d="M218 122 C174 154 174 254 218 286" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round"/>
+  <path d="M218 122 C262 154 262 254 218 286" fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round"/>
+  <text x="42" y="468" fill="#ffffff" font-family="Arial, sans-serif" font-size="48" font-weight="700">BFSU</text>
+</svg>

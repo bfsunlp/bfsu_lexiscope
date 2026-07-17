@@ -2,6 +2,7 @@
 """BFSU WebLens GUI entry point."""
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import queue
@@ -17,6 +18,10 @@ from pathlib import Path
 from types import SimpleNamespace
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
+from tkinter import font as tkfont
+
+import customtkinter as ctk
+from PIL import Image
 
 from bfsu_weblens.collector import (
     CollectorConfig,
@@ -56,8 +61,52 @@ from bfsu_weblens.content_downloader import (
     content_result_from_manifest,
 )
 from bfsu_weblens.i18n import t
+from bfsu_weblens.ui_common import (
+    FONT_FAMILY, COLOR_BG, COLOR_PANEL, COLOR_SURFACE, COLOR_BORDER, COLOR_TEXT, COLOR_MUTED,
+    COLOR_ACCENT, COLOR_ACCENT_HOVER, COLOR_LLM, COLOR_LLM_HOVER, COLOR_DANGER,
+    COLOR_DANGER_HOVER, COLOR_TOOLBAR, CTkSection, HoverScrollableFrame, CTkSpinbox,
+    CompatProgressBar, CTkSplitPane, DpiAwareMenu, DpiAwareTreeview, apply_window_icon,
+    button_colors, fit_window_to_screen,
+)
 
 APP_NAME = "BFSU WebLens"
+
+def enable_windows_dpi_awareness() -> None:
+    """Make Tk/CustomTkinter respect Windows 10/11 per-monitor DPI scaling."""
+    if not sys.platform.startswith("win"):
+        return
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # per-monitor aware
+    except Exception:
+        try:
+            ctypes.windll.user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+
+def configure_customtkinter_theme() -> None:
+    """Load the same light CustomTkinter theme family used by ClearLens."""
+    try:
+        ctk.set_appearance_mode("light")
+    except Exception:
+        pass
+    try:
+        theme_path = Path(resource_path("assets/clearlens_theme.json"))
+        if theme_path.exists():
+            ctk.set_default_color_theme(str(theme_path))
+        else:
+            ctk.set_default_color_theme("blue")
+    except Exception:
+        try:
+            ctk.set_default_color_theme("blue")
+        except Exception:
+            pass
+
+
+def ctk_button_colors(kind: str = "normal") -> dict[str, object]:
+    return button_colors(kind)
+
+
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -88,7 +137,7 @@ def query_mode_options_for_engine(engine: str):
 
 COLLECTOR_CONTEXT_ATTRS = [
     "main_pane", "left_panel", "right_panel", "action_bar",
-    "start_button", "stop_button", "export_button", "import_links_button", "clear_button", "open_button",
+    "start_button", "stop_button", "export_button", "import_links_button", "clear_button", "open_button", "open_download_button",
     "toolbar_progress_label", "toolbar_progress",
     "settings_scroll", "query_frame", "crawl_frame", "limit_frame", "output_frame",
     "query_mode_label", "query_mode_combo", "vertical_label", "vertical_combo",
@@ -113,7 +162,7 @@ COLLECTOR_CONTEXT_ATTRS = [
     "content_fetch_mode_label", "content_fetch_mode_combo", "content_delay_label", "content_delay_min_var", "content_delay_max_var",
     "content_receive_wait_label", "content_receive_wait_var",
     "content_cleaning_label", "content_cleaning_combo", "content_selenium_fallback_check", "output_hint_label",
-    "preview_frame", "preview_toolbar", "open_link_button", "delete_selected_button",
+    "preview_frame", "preview_toolbar", "record_group_label", "sort_group_label", "sample_group_label", "download_group_label", "open_link_button", "delete_selected_button",
     "sort_label", "sort_time_button", "sort_title_button", "sort_source_button",
     "result_edit_menu", "result_edit_button", "preview_count_var", "preview_count_label",
     "sample_scheme_label", "sample_scheme_var", "sample_scheme_combo", "sample_count_label", "sample_count_var", "sample_count_spin",
@@ -135,7 +184,7 @@ def default_output_path() -> str:
 
 def default_settings_dict() -> dict:
     today = date.today().isoformat()
-    return {
+    defaults = {
         "ui_lang": "en",
         "query_mode": "single",
         "search_vertical": "news",
@@ -153,7 +202,7 @@ def default_settings_dict() -> dict:
         "end_date": today,
         "max_pages": 30,
         "day_step": 7,
-        "per_page": 50,
+        "per_page": 10,
         "timeout": 15,
         "post_fetch_wait_ms": 800,
         "empty_page_retry_count": 2,
@@ -186,6 +235,24 @@ def default_settings_dict() -> dict:
         "sample_count": 20,
         "user_agent": DEFAULT_USER_AGENT,
     }
+    # A release-level default configuration file is kept outside the code so
+    # maintainers can audit and adjust defaults without editing main.py.
+    candidates = [
+        app_base_dir() / "config" / "default_settings.json",
+        Path(resource_path("config/default_settings.json")),
+    ]
+    for config_path in candidates:
+        try:
+            if config_path.exists():
+                overrides = json.loads(config_path.read_text(encoding="utf-8"))
+                if isinstance(overrides, dict):
+                    for key, value in overrides.items():
+                        if key in defaults:
+                            defaults[key] = value
+                break
+        except Exception:
+            continue
+    return defaults
 
 
 def resource_path(relative: str) -> str:
@@ -219,51 +286,13 @@ def default_browser_binary_path() -> str:
     return ""
 
 
-class ScrollableFrame(ttk.Frame):
-    """A reusable scrollable frame for dense settings panels."""
-
-    def __init__(self, parent, style="Panel.TFrame", *args, **kwargs):
-        super().__init__(parent, style=style, *args, **kwargs)
-        self.canvas = tk.Canvas(self, highlightthickness=0, bd=0, background="#F7FAFB")
-        self.vbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.hbar = ttk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
-        self.inner = ttk.Frame(self.canvas, style=style)
-        self.inner_id = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.vbar.set, xscrollcommand=self.hbar.set)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        self.vbar.grid(row=0, column=1, sticky="ns")
-        self.hbar.grid(row=1, column=0, sticky="ew")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
-        self.inner.bind("<Configure>", self._on_inner_configure)
-        self.canvas.bind("<Configure>", self._on_canvas_configure)
-        self._bind_mousewheel(self.canvas)
-        self._bind_mousewheel(self.inner)
-
-    def _on_inner_configure(self, _event=None):
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
-    def _on_canvas_configure(self, event):
-        # Fit the settings panel to the currently visible width.
-        # Child widgets keep their own scrollbars where needed, so this avoids
-        # forcing the left pane to stay overly wide after the user drags the sash.
-        self.canvas.itemconfigure(self.inner_id, width=max(1, event.width))
-
-    def _bind_mousewheel(self, widget):
-        widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
-        widget.bind("<Shift-MouseWheel>", self._on_shift_mousewheel, add="+")
-        widget.bind("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"), add="+")
-        widget.bind("<Button-5>", lambda e: self.canvas.yview_scroll(1, "units"), add="+")
-
-    def _on_mousewheel(self, event):
-        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-    def _on_shift_mousewheel(self, event):
-        self.canvas.xview_scroll(int(-1 * (event.delta / 120)), "units")
+ScrollableFrame = HoverScrollableFrame
 
 
-class BFSUWebLensApp(tk.Tk):
+class BFSUWebLensApp(ctk.CTk):
     def __init__(self):
+        enable_windows_dpi_awareness()
+        configure_customtkinter_theme()
         super().__init__()
         self.ui_lang = "en"
         self.records = []
@@ -295,14 +324,17 @@ class BFSUWebLensApp(tk.Tk):
         self.sort_reverse = {"time": False, "title": False, "source": False}
         self.contexts = {}
         self.active_context_key = None
+        self._main_window_fit_done = False
         self.worker_context_key = None
         self.content_worker_context_key = None
         self._building_context_key = "google"
         self.icon_path = resource_path("assets/app.ico")
+        self.icon_png_path = resource_path("assets/app.png")
         self.title(APP_NAME)
-        self.geometry("1600x940")
-        self.minsize(1280, 760)
+        self.geometry("1680x940")
+        self.minsize(1080, 680)
         self._apply_icon(self)
+        self.after(250, lambda: self._apply_icon(self))
         self._setup_style()
         self._build_ui()
         self._set_language(self.settings.get("ui_lang", self.defaults["ui_lang"]))
@@ -310,6 +342,7 @@ class BFSUWebLensApp(tk.Tk):
         self._bind_shortcuts()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(120, self._poll_queue)
+        self._fit_main_window_once()
 
     def _load_settings(self):
         data = {}
@@ -329,6 +362,10 @@ class BFSUWebLensApp(tk.Tk):
         # previous default value so intentional custom values can still survive.
         if data.get("no_new_pages_limit") == 2:
             data["no_new_pages_limit"] = 1
+        # v1.2.8 changes Google's shipped Results per page default from 50 to 10.
+        # Migrate the previous default value so existing installations receive the new stable pagination setting.
+        if data.get("per_page") == 50:
+            data["per_page"] = 10
         merged = dict(getattr(self, "defaults", default_settings_dict()))
         merged.update(data)
         return merged
@@ -510,76 +547,128 @@ class BFSUWebLensApp(tk.Tk):
         self.destroy()
 
     def _apply_icon(self, win):
-        try:
-            if os.path.exists(self.icon_path):
-                win.iconbitmap(self.icon_path)
-        except Exception:
-            pass
+        """Apply the WebLens icon at multiple sizes for crisp Windows taskbar rendering."""
+        apply_window_icon(win, self.icon_png_path, self.icon_path, default=(win is self))
+
+    def _fit_main_window_once(self):
+        """Fit the main window exactly once during startup.
+
+        Re-running the positioning routine from the queue poller prevents users
+        from moving the window because every mouse drag is overwritten on the
+        next poll cycle.  The one-shot guard keeps startup clamping while leaving
+        all later window movement entirely under user control.
+        """
+        if self._main_window_fit_done:
+            return
+        self._main_window_fit_done = True
+        self._fit_main_window()
+
+    def _fit_main_window(self):
+        fit_window_to_screen(
+            self,
+            requested_width=1680,
+            requested_height=940,
+            parent=None,
+            margin=32,
+            min_width=1180,
+            min_height=680,
+        )
 
     def _setup_style(self):
-        self.configure(bg="#E8EEF1")
+        self.configure(fg_color=COLOR_BG)
+        try:
+            self._default_tk_font = tkfont.Font(family=FONT_FAMILY, size=10)
+            self.option_add("*Font", self._default_tk_font)
+        except Exception:
+            pass
+        # Native controls remain only where CustomTkinter has no equivalent:
+        # menu bars, Treeview and multi-select Listbox widgets.
         style = ttk.Style(self)
         try:
             style.theme_use("clam")
         except tk.TclError:
             pass
         self.colors = {
-            "navy": "#17384A",
-            "blue": "#1F4E5F",
-            "blue2": "#2F6F7E",
-            "gold": "#D5A84A",
-            "bg": "#E8EEF1",
-            "panel": "#F7FAFB",
-            "text": "#1F2A30",
+            "navy": COLOR_ACCENT,
+            "blue": COLOR_ACCENT,
+            "blue2": COLOR_ACCENT_HOVER,
+            "gold": "#c6922d",
+            "bg": COLOR_BG,
+            "panel": COLOR_PANEL,
+            "surface": COLOR_SURFACE,
+            "text": COLOR_TEXT,
+            "muted": COLOR_MUTED,
+            "border": COLOR_BORDER,
+            "danger": COLOR_DANGER,
         }
-        style.configure("TFrame", background=self.colors["bg"])
-        style.configure("Panel.TFrame", background=self.colors["panel"], relief="flat")
-        style.configure("Toolbar.TFrame", background="#D8E3E8")
-        style.configure("TLabel", background=self.colors["bg"], foreground=self.colors["text"], font=("Segoe UI", 9))
-        style.configure("Panel.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 9))
-        style.configure("Toolbar.TLabel", background="#D8E3E8", foreground=self.colors["navy"], font=("Segoe UI", 9, "bold"))
-        style.configure("TLabelframe", background=self.colors["panel"], bordercolor="#CAD6DB")
-        style.configure("TLabelframe.Label", background=self.colors["panel"], foreground=self.colors["blue"], font=("Segoe UI", 10, "bold"))
-        style.configure("Accent.TButton", background=self.colors["blue"], foreground="white", font=("Segoe UI", 9, "bold"), padding=(10, 5))
-        style.map("Accent.TButton", background=[("active", self.colors["blue2"])])
-        style.configure("Danger.TButton", background="#A94442", foreground="white", font=("Segoe UI", 9, "bold"), padding=(10, 5))
-        style.configure("Link.TButton", background=self.colors["panel"], foreground=self.colors["blue"], font=("Segoe UI", 9, "underline"), borderwidth=0)
-        style.configure("Preview.TButton", background=self.colors["panel"], foreground=self.colors["navy"], font=("Segoe UI", 8), padding=(6, 2))
-        style.configure("Preview.TMenubutton", background=self.colors["panel"], foreground=self.colors["navy"], font=("Segoe UI", 8), padding=(6, 2))
-        style.configure("Preview.TLabel", background=self.colors["panel"], foreground=self.colors["text"], font=("Segoe UI", 8))
-        style.configure("Treeview", rowheight=24, font=("Segoe UI", 9), fieldbackground="white", background="white")
-        style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"), background="#D8E3E8", foreground="#17384A")
+        style.configure("TFrame", background=COLOR_BG)
+        style.configure("TLabel", background=COLOR_BG, foreground=COLOR_TEXT, font=(FONT_FAMILY, 10))
+        style.configure("Treeview", background=COLOR_SURFACE, fieldbackground=COLOR_SURFACE, foreground=COLOR_TEXT)
+        style.configure("Treeview.Heading", background="#d9e8eb", foreground=COLOR_TEXT, font=(FONT_FAMILY, 10, "bold"))
+        style.map("Treeview", background=[("selected", "#b7dfe3")], foreground=[("selected", COLOR_TEXT)])
 
     def _build_ui(self):
         self._build_menu()
-        # No large title banner: preserve vertical space for functional widgets.
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill="both", expand=True, padx=8, pady=(8, 4))
-        self.google_tab = ttk.Frame(self.notebook, padding=6)
-        self.baidu_tab = ttk.Frame(self.notebook, padding=6)
-        self.notebook.add(self.google_tab, text="Google")
-        self.notebook.add(self.baidu_tab, text="Baidu")
+        self.notebook = ctk.CTkTabview(
+            self,
+            fg_color=COLOR_BG,
+            segmented_button_fg_color="#d9e8eb",
+            segmented_button_selected_color=COLOR_ACCENT,
+            segmented_button_selected_hover_color=COLOR_ACCENT_HOVER,
+            segmented_button_unselected_color="#d9e8eb",
+            segmented_button_unselected_hover_color="#c9dde0",
+            text_color=COLOR_TEXT,
+            command=self._on_tab_changed,
+            anchor="nw",
+            corner_radius=6,
+        )
+        # CTkTabview defaults center the selector and reserve a tall header.
+        # Keep the engine selector compact and aligned to the upper-left so the
+        # crawler/result workspace receives more vertical room.
+        try:
+            self.notebook._button_height = 25
+            self.notebook._outer_spacing = 2
+            self.notebook._outer_button_overhang = 1
+            self.notebook._segmented_button.configure(
+                height=25,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
+                dynamic_resizing=False,
+            )
+            self.notebook._configure_grid()
+            self.notebook._set_grid_canvas()
+        except Exception:
+            pass
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=(4, 4))
+        self.notebook.add("Google")
+        self.notebook.add("Baidu")
+        self.google_tab = self.notebook.tab("Google")
+        self.baidu_tab = self.notebook.tab("Baidu")
 
         self._build_collector_tab(self.google_tab, "google")
         self._build_collector_tab(self.baidu_tab, "baidu")
-        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed, add="+")
 
-        bottom = ttk.Frame(self, padding=(8, 2, 8, 8))
-        bottom.pack(fill="x")
+        bottom = ctk.CTkFrame(self, fg_color=COLOR_TOOLBAR, corner_radius=0, height=38)
+        bottom.pack(fill="x", padx=10, pady=(0, 10))
+        bottom.pack_propagate(False)
         self.status_var = tk.StringVar(value="Ready.")
-        self.progress = ttk.Progressbar(bottom, mode="determinate", maximum=100, value=0)
-        self.progress.pack(side="left", fill="x", expand=True, padx=(0, 10))
-        self.status_label = ttk.Label(bottom, textvariable=self.status_var)
-        self.status_label.pack(side="right")
+        self.progress = CompatProgressBar(bottom, maximum=100, value=0, height=12)
+        self.progress.pack(side="left", fill="x", expand=True, padx=(10, 12), pady=13)
+        self.status_label = ctk.CTkLabel(
+            bottom,
+            textvariable=self.status_var,
+            text_color=COLOR_MUTED,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+        )
+        self.status_label.pack(side="right", padx=(0, 10))
         self._activate_context("google", sync_previous=False)
 
     def _build_menu(self):
-        self.menu_bar = tk.Menu(self, tearoff=False)
-        self.file_menu = tk.Menu(self.menu_bar, tearoff=False)
-        self.view_menu = tk.Menu(self.menu_bar, tearoff=False)
-        self.lang_menu = tk.Menu(self.view_menu, tearoff=False)
-        self.tools_menu = tk.Menu(self.menu_bar, tearoff=False)
-        self.help_menu = tk.Menu(self.menu_bar, tearoff=False)
+        self.menu_bar = DpiAwareMenu(self, tearoff=False)
+        self.file_menu = DpiAwareMenu(self.menu_bar, tearoff=False)
+        self.view_menu = DpiAwareMenu(self.menu_bar, tearoff=False)
+        self.lang_menu = DpiAwareMenu(self.view_menu, tearoff=False)
+        self.tools_menu = DpiAwareMenu(self.menu_bar, tearoff=False)
+        self.help_menu = DpiAwareMenu(self.menu_bar, tearoff=False)
         self.file_menu.add_command(label="Import links/results", command=self._import_links_file)
         self.file_menu.add_command(label="Export results", command=self._export_results)
         self.file_menu.add_separator()
@@ -604,7 +693,10 @@ class BFSUWebLensApp(tk.Tk):
         self.menu_bar.add_cascade(label="View", menu=self.view_menu)
         self.menu_bar.add_cascade(label="Tools", menu=self.tools_menu)
         self.menu_bar.add_cascade(label="Help", menu=self.help_menu)
-        self.config(menu=self.menu_bar)
+        try:
+            self.configure(menu=self.menu_bar)
+        except Exception:
+            self.tk.call(self._w, "configure", "-menu", self.menu_bar)
 
     def _make_collector_context(self, key: str):
         ctx = SimpleNamespace(key=key, engine=key)
@@ -660,14 +752,12 @@ class BFSUWebLensApp(tk.Tk):
 
     def _selected_context_key(self):
         try:
-            current = self.notebook.select()
-            if current == str(self.google_tab):
-                return "google"
-            if current == str(self.baidu_tab):
+            current = self.notebook.get()
+            if current == "Baidu":
                 return "baidu"
+            return "google"
         except Exception:
-            pass
-        return getattr(self, "active_context_key", "google") or "google"
+            return getattr(self, "active_context_key", "google") or "google"
 
     def _ensure_active_context_from_tab(self):
         key = self._selected_context_key()
@@ -675,7 +765,7 @@ class BFSUWebLensApp(tk.Tk):
             self._activate_context(key)
         return key
 
-    def _on_tab_changed(self, _event=None):
+    def _on_tab_changed(self, _value=None):
         self._ensure_active_context_from_tab()
         try:
             self._update_preview_count()
@@ -686,21 +776,26 @@ class BFSUWebLensApp(tk.Tk):
         self._building_context_key = key
         self.current_vertical_options = vertical_options_for_engine(key)
         self.current_query_mode_options = query_mode_options_for_engine(key)
-        tab.rowconfigure(1, weight=1)
-        tab.columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(1, weight=1)
+        tab.grid_columnconfigure(0, weight=1)
         self._build_action_bar(tab)
-        self.main_pane = ttk.PanedWindow(tab, orient="horizontal")
-        self.main_pane.grid(row=1, column=0, sticky="nsew")
-        self.left_panel = ttk.Frame(self.main_pane, style="Panel.TFrame")
-        self.right_panel = ttk.Frame(self.main_pane, style="Panel.TFrame", padding=8)
-        self.main_pane.add(self.left_panel, weight=1)
-        self.main_pane.add(self.right_panel, weight=2)
+        self.main_pane = CTkSplitPane(
+            tab,
+            orientation="horizontal",
+            initial_ratio=0.41,
+            min_first=500,
+            min_second=650,
+            separator_width=8,
+            first_color=COLOR_PANEL,
+            second_color="transparent",
+        )
+        self.main_pane.grid(row=1, column=0, sticky="nsew", pady=(0, 2))
+        self.left_panel = self.main_pane.first
+        self.right_panel = self.main_pane.second
         self._build_settings_panel(self.left_panel)
         self._build_results_panel(self.right_panel)
-        self._initial_sash_done = False
+        self._initial_sash_done = True
         self.contexts[key] = self._make_collector_context(key)
-        self.after(250, lambda k=key: self._set_initial_sash_for_context(k))
-        tab.bind("<Configure>", lambda _e, k=key: self._maybe_reset_initial_sash_for_context(k), add="+")
 
     def _set_initial_sash_for_context(self, key: str):
         ctx = self.contexts.get(key)
@@ -708,11 +803,13 @@ class BFSUWebLensApp(tk.Tk):
         if pane is None:
             return
         try:
-            width = pane.winfo_width()
-            if width > 300:
-                pos = min(max(420, int(width * 0.36)), 620)
-                pane.sashpos(0, pos)
-                ctx._initial_sash_done = True
+            if hasattr(pane, "set_ratio"):
+                pane.set_ratio(0.41)
+            else:
+                width = pane.winfo_width()
+                if width > 300:
+                    pane.sashpos(0, min(max(500, int(width * 0.41)), 720))
+            ctx._initial_sash_done = True
         except Exception:
             pass
 
@@ -722,172 +819,237 @@ class BFSUWebLensApp(tk.Tk):
             self.after(80, lambda k=key: self._set_initial_sash_for_context(k))
 
     def _build_action_bar(self, parent):
-        self.action_bar = ttk.Frame(parent, style="Toolbar.TFrame", padding=(8, 6))
-        self.action_bar.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        self.action_bar.columnconfigure(7, weight=1)
-        self.start_button = ttk.Button(self.action_bar, text="", style="Accent.TButton", command=self._start_crawl)
-        self.start_button.grid(row=0, column=0, padx=(0, 6), sticky="w")
-        self.stop_button = ttk.Button(self.action_bar, text="", style="Danger.TButton", command=self._stop_crawl, state="disabled")
-        self.stop_button.grid(row=0, column=1, padx=(0, 6), sticky="w")
-        self.export_button = ttk.Button(self.action_bar, text="", command=self._export_results)
-        self.export_button.grid(row=0, column=2, padx=(0, 6), sticky="w")
-        self.import_links_button = ttk.Button(self.action_bar, text="", command=self._import_links_file)
-        self.import_links_button.grid(row=0, column=3, padx=(0, 6), sticky="w")
-        self.clear_button = ttk.Button(self.action_bar, text="", command=self._clear_results)
-        self.clear_button.grid(row=0, column=4, padx=(0, 6), sticky="w")
-        self.open_button = ttk.Button(self.action_bar, text="", command=self._open_output)
-        self.open_button.grid(row=0, column=5, padx=(0, 12), sticky="w")
-        self.toolbar_progress_label = ttk.Label(self.action_bar, text="", style="Toolbar.TLabel")
-        self.toolbar_progress_label.grid(row=0, column=6, padx=(0, 6), sticky="w")
-        self.toolbar_progress = ttk.Progressbar(self.action_bar, mode="determinate", maximum=100, value=0, length=260)
-        self.toolbar_progress.grid(row=0, column=7, sticky="w")
+        self.action_bar = ctk.CTkFrame(parent, fg_color=COLOR_TOOLBAR, corner_radius=0, height=48)
+        self.action_bar.grid(row=0, column=0, sticky="ew", pady=(0, 8))
+        self.action_bar.grid_propagate(False)
+        self.action_bar.grid_columnconfigure(8, weight=1)
+
+        font = ctk.CTkFont(family=FONT_FAMILY, size=12)
+        def button(column, command, kind="normal", width=92):
+            widget = ctk.CTkButton(
+                self.action_bar,
+                text="",
+                command=command,
+                width=width,
+                height=32,
+                font=font,
+                **ctk_button_colors(kind),
+            )
+            widget.grid(row=0, column=column, padx=(6 if column == 0 else 2, 2), pady=8, sticky="w")
+            return widget
+
+        self.start_button = button(0, self._start_crawl, "accent", 100)
+        self.stop_button = button(1, self._stop_crawl, "danger", 100)
+        self.stop_button.configure(state="disabled")
+        self.export_button = button(2, self._export_results)
+        self.import_links_button = button(3, self._import_links_file, width=106)
+        self.clear_button = button(4, self._clear_results)
+        self.open_button = button(5, self._open_output, width=106)
+        self.open_download_button = button(6, self._open_download_folder, width=128)
+        self.toolbar_progress_label = ctk.CTkLabel(
+            self.action_bar,
+            text="",
+            text_color=COLOR_ACCENT,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+        )
+        self.toolbar_progress_label.grid(row=0, column=7, padx=(12, 6), sticky="e")
+        self.toolbar_progress = CompatProgressBar(self.action_bar, maximum=100, value=0, height=12)
+        self.toolbar_progress.grid(row=0, column=8, sticky="ew", padx=(0, 12))
 
     def _build_settings_panel(self, parent):
-        """Build a single-column, wide, scrollable settings area.
-
-        v0.6 returns to a clean one-column layout.  Each settings group is
-        stacked vertically, while the full settings panel remains scrollable in
-        both directions.  The language and country/region multi-select boxes are
-        deliberately kept as large, visible list boxes instead of compact
-        comboboxes, because users often need to select several Google lr/cr
-        values at once.
-        """
-        parent.rowconfigure(0, weight=1)
-        parent.columnconfigure(0, weight=1)
+        """Build the original single-column settings layout with CTk controls."""
+        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_columnconfigure(0, weight=1)
         self.settings_scroll = ScrollableFrame(parent)
-        self.settings_scroll.grid(row=0, column=0, sticky="nsew")
+        self.settings_scroll.grid(row=0, column=0, sticky="nsew", padx=(4, 2), pady=4)
         panel = self.settings_scroll.inner
-        panel.columnconfigure(0, weight=1)
+        panel.grid_columnconfigure(0, weight=1)
 
-        self.query_frame = ttk.LabelFrame(panel, text="Query", padding=10)
-        self.query_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 8))
-        self.crawl_frame = ttk.LabelFrame(panel, text="Crawl", padding=10)
-        self.crawl_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
-        self.limit_frame = ttk.LabelFrame(panel, text="Limit", padding=10)
-        self.limit_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
-        self.output_frame = ttk.LabelFrame(panel, text="Output", padding=10)
-        self.output_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(0, 8))
+        self.query_frame = CTkSection(panel, text="Query")
+        self.query_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 7))
+        self.crawl_frame = CTkSection(panel, text="Crawl")
+        self.crawl_frame.grid(row=1, column=0, sticky="ew", padx=6, pady=7)
+        self.limit_frame = CTkSection(panel, text="Limit")
+        self.limit_frame.grid(row=2, column=0, sticky="ew", padx=6, pady=7)
+        self.output_frame = CTkSection(panel, text="Output")
+        self.output_frame.grid(row=3, column=0, sticky="ew", padx=6, pady=(7, 12))
 
-        for frame in [self.query_frame, self.crawl_frame, self.limit_frame, self.output_frame]:
-            frame.columnconfigure(0, weight=0, minsize=110)
-            frame.columnconfigure(1, weight=1)
+        label_font = ctk.CTkFont(family=FONT_FAMILY, size=12)
+        input_font = ctk.CTkFont(family=FONT_FAMILY, size=12)
+        for frame in (self.query_frame, self.crawl_frame, self.limit_frame, self.output_frame):
+            frame.grid_columnconfigure(0, weight=0, minsize=138)
+            frame.grid_columnconfigure(1, weight=1)
 
-        # Query settings
-        self.query_mode_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.query_mode_label.grid(row=0, column=0, sticky="w", pady=3)
-        self.query_mode_combo = ttk.Combobox(self.query_frame, state="readonly", width=42)
-        self.query_mode_combo.grid(row=0, column=1, sticky="ew", pady=3)
+        def label(master, row, *, column=0, columnspan=1, pady=5, sticky="w", wraplength=0):
+            widget = ctk.CTkLabel(
+                master,
+                text="",
+                font=label_font,
+                text_color=COLOR_TEXT,
+                anchor="w",
+                justify="left",
+                wraplength=wraplength,
+            )
+            widget.grid(row=row, column=column, columnspan=columnspan, sticky=sticky, padx=(12, 8), pady=pady)
+            return widget
 
-        self.vertical_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.vertical_label.grid(row=1, column=0, sticky="w", pady=3)
-        self.vertical_combo = ttk.Combobox(self.query_frame, state="readonly", width=42)
-        self.vertical_combo.grid(row=1, column=1, sticky="ew", pady=3)
+        def combo(master, row, *, variable=None, values=None, column=1, width=250):
+            widget = ctk.CTkComboBox(
+                master,
+                variable=variable,
+                values=list(values or [""]),
+                state="readonly",
+                height=32,
+                width=width,
+                font=input_font,
+                dropdown_font=input_font,
+            )
+            widget.grid(row=row, column=column, sticky="ew", padx=(4, 12), pady=5)
+            return widget
 
-        self.baidu_sort_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.baidu_sort_label.grid(row=2, column=0, sticky="w", pady=3)
-        self.baidu_sort_combo = ttk.Combobox(self.query_frame, state="readonly", width=42)
-        self.baidu_sort_combo.grid(row=2, column=1, sticky="ew", pady=3)
+        def normal_button(master, text, command, *, width=82, height=30, kind="normal"):
+            return ctk.CTkButton(
+                master,
+                text=text,
+                command=command,
+                width=width,
+                height=height,
+                font=input_font,
+                **ctk_button_colors(kind),
+            )
+
+        def link_button(master, row, command):
+            widget = ctk.CTkButton(
+                master,
+                text="",
+                command=command,
+                height=26,
+                width=90,
+                anchor="w",
+                fg_color="transparent",
+                hover_color="#d7e7e9",
+                text_color=COLOR_ACCENT,
+                border_width=0,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=12, underline=True),
+            )
+            widget.grid(row=row, column=0, columnspan=2, sticky="w", padx=8, pady=(0, 7))
+            return widget
+
+        # Query settings. Row 0 is reserved for each section heading.
+        self.query_mode_label = label(self.query_frame, 1)
+        self.query_mode_combo = combo(self.query_frame, 1)
+        self.vertical_label = label(self.query_frame, 2)
+        self.vertical_combo = combo(self.query_frame, 2)
+        self.baidu_sort_label = label(self.query_frame, 3)
+        self.baidu_sort_combo = combo(self.query_frame, 3)
         if getattr(self, "_building_context_key", "google") != "baidu":
             self.baidu_sort_label.grid_remove()
             self.baidu_sort_combo.grid_remove()
 
-        self.backend_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.backend_label.grid(row=3, column=0, sticky="w", pady=3)
-        self.backend_combo = ttk.Combobox(self.query_frame, state="readonly", width=42)
-        self.backend_combo.grid(row=3, column=1, sticky="ew", pady=3)
+        self.backend_label = label(self.query_frame, 4)
+        self.backend_combo = combo(self.query_frame, 4)
 
-        self.driver_path_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.driver_path_label.grid(row=4, column=0, sticky="w", pady=3)
+        self.driver_path_label = label(self.query_frame, 5)
         self.driver_path_var = tk.StringVar(value=str(Path(resource_path("tools/chromedriver.exe"))))
-        driver_path_frame = ttk.Frame(self.query_frame, style="Panel.TFrame")
-        driver_path_frame.grid(row=4, column=1, sticky="ew", pady=3)
-        driver_path_frame.columnconfigure(0, weight=1)
-        self.driver_path_entry = ttk.Entry(driver_path_frame, textvariable=self.driver_path_var)
-        self.driver_path_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.driver_browse_button = ttk.Button(driver_path_frame, text="", command=self._browse_driver)
-        self.driver_browse_button.grid(row=0, column=1, sticky="e")
+        driver_path_frame = ctk.CTkFrame(self.query_frame, fg_color="transparent")
+        driver_path_frame.grid(row=5, column=1, sticky="ew", padx=(4, 12), pady=5)
+        driver_path_frame.grid_columnconfigure(0, weight=1)
+        self.driver_path_entry = ctk.CTkEntry(driver_path_frame, textvariable=self.driver_path_var, height=32, font=input_font)
+        self.driver_path_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.driver_browse_button = normal_button(driver_path_frame, "", self._browse_driver, width=78)
+        self.driver_browse_button.grid(row=0, column=1)
 
-        self.browser_binary_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.browser_binary_label.grid(row=5, column=0, sticky="w", pady=3)
+        self.browser_binary_label = label(self.query_frame, 6)
         self.browser_binary_var = tk.StringVar(value=default_browser_binary_path())
-        browser_binary_frame = ttk.Frame(self.query_frame, style="Panel.TFrame")
-        browser_binary_frame.grid(row=5, column=1, sticky="ew", pady=3)
-        browser_binary_frame.columnconfigure(0, weight=1)
-        self.browser_binary_entry = ttk.Entry(browser_binary_frame, textvariable=self.browser_binary_var)
-        self.browser_binary_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.binary_browse_button = ttk.Button(browser_binary_frame, text="", command=self._browse_browser_binary)
-        self.binary_browse_button.grid(row=0, column=1, sticky="e")
+        browser_binary_frame = ctk.CTkFrame(self.query_frame, fg_color="transparent")
+        browser_binary_frame.grid(row=6, column=1, sticky="ew", padx=(4, 12), pady=5)
+        browser_binary_frame.grid_columnconfigure(0, weight=1)
+        self.browser_binary_entry = ctk.CTkEntry(browser_binary_frame, textvariable=self.browser_binary_var, height=32, font=input_font)
+        self.browser_binary_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.binary_browse_button = normal_button(browser_binary_frame, "", self._browse_browser_binary, width=78)
+        self.binary_browse_button.grid(row=0, column=1)
 
-        self.browser_wait_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.browser_wait_label.grid(row=6, column=0, sticky="w", pady=3)
+        self.browser_wait_label = label(self.query_frame, 7)
         self.browser_wait_var = tk.IntVar(value=3500)
-        ttk.Spinbox(self.query_frame, from_=0, to=60000, textvariable=self.browser_wait_var, width=14).grid(row=6, column=1, sticky="w", pady=3)
+        CTkSpinbox(self.query_frame, from_=0, to=60000, textvariable=self.browser_wait_var, width=170).grid(
+            row=7, column=1, sticky="w", padx=(4, 12), pady=5
+        )
 
         self.browser_headless_var = tk.BooleanVar(value=False)
-        self.browser_headless_check = ttk.Checkbutton(self.query_frame, text="", variable=self.browser_headless_var)
-        self.browser_headless_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=3)
+        self.browser_headless_check = ctk.CTkCheckBox(
+            self.query_frame,
+            text="",
+            variable=self.browser_headless_var,
+            height=26,
+            checkbox_width=19,
+            checkbox_height=19,
+            font=label_font,
+        )
+        self.browser_headless_check.grid(row=8, column=0, columnspan=2, sticky="w", padx=12, pady=5)
 
-        self.query_terms_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.query_terms_label.grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 3))
-        self.query_text = tk.Text(self.query_frame, height=6, wrap="word", font=("Segoe UI", 9))
-        self.query_text.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(0, 3))
-        self.query_frame.rowconfigure(9, weight=0)
+        self.query_terms_label = label(self.query_frame, 9, columnspan=2, pady=(10, 4))
+        self.query_text = ctk.CTkTextbox(
+            self.query_frame,
+            height=132,
+            wrap="word",
+            font=input_font,
+            fg_color=COLOR_SURFACE,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            text_color=COLOR_TEXT,
+        )
+        self.query_text.grid(row=10, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 4))
+        self.query_help_btn = link_button(self.query_frame, 11, lambda: self._show_help("query"))
 
-        self.query_help_btn = ttk.Button(self.query_frame, text="", style="Link.TButton", command=lambda: self._show_help("query"))
-        self.query_help_btn.grid(row=10, column=0, columnspan=2, sticky="w", pady=(0, 8))
-
-        self.site_label = ttk.Label(self.query_frame, text="", style="Panel.TLabel")
-        self.site_label.grid(row=11, column=0, columnspan=2, sticky="w", pady=(8, 3))
-        # Multi-line domain input.  The backend already accepts one item per line
-        # or semicolon-separated values; a Text widget makes this usable for long
-        # source lists such as people.com.cn, xinhuanet.com, .gov.cn, .edu.cn.
+        self.site_label = label(self.query_frame, 12, columnspan=2, pady=(8, 4))
         self.site_var = tk.StringVar()
-        site_box = ttk.Frame(self.query_frame, style="Panel.TFrame")
-        site_box.grid(row=12, column=0, columnspan=2, sticky="ew", pady=3)
-        site_box.columnconfigure(0, weight=1)
-        self.site_entry = tk.Text(site_box, height=4, wrap="none", font=("Segoe UI", 9), undo=True)
-        site_y = ttk.Scrollbar(site_box, orient="vertical", command=self.site_entry.yview)
-        site_x = ttk.Scrollbar(site_box, orient="horizontal", command=self.site_entry.xview)
-        self.site_entry.configure(yscrollcommand=site_y.set, xscrollcommand=site_x.set)
-        self.site_entry.grid(row=0, column=0, sticky="ew")
-        site_y.grid(row=0, column=1, sticky="ns")
-        site_x.grid(row=1, column=0, sticky="ew")
-        self.site_help_btn = ttk.Button(self.query_frame, text="", style="Link.TButton", command=lambda: self._show_help("site"))
-        self.site_help_btn.grid(row=13, column=0, columnspan=2, sticky="w", pady=(0, 2))
+        self.site_entry = ctk.CTkTextbox(
+            self.query_frame,
+            height=100,
+            wrap="none",
+            font=input_font,
+            fg_color=COLOR_SURFACE,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            text_color=COLOR_TEXT,
+        )
+        self.site_entry.grid(row=13, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 4))
+        self.site_help_btn = link_button(self.query_frame, 14, lambda: self._show_help("site"))
 
-        # Crawl settings
-        self.safe_label = ttk.Label(self.crawl_frame, text="", style="Panel.TLabel")
-        self.safe_label.grid(row=0, column=0, sticky="w", pady=3)
+        # Crawl settings.
+        self.safe_label = label(self.crawl_frame, 1)
         self.safe_var = tk.StringVar(value="")
-        self.safe_combo = ttk.Combobox(self.crawl_frame, textvariable=self.safe_var, state="readonly", values=["", "off", "medium", "high"], width=16)
-        self.safe_combo.grid(row=0, column=1, sticky="w", pady=3)
+        self.safe_combo = combo(self.crawl_frame, 1, variable=self.safe_var, values=["", "off", "medium", "high"], width=180)
 
         self.disable_filter_var = tk.BooleanVar(value=False)
-        self.filter_check = ttk.Checkbutton(self.crawl_frame, text="", variable=self.disable_filter_var)
-        self.filter_check.grid(row=1, column=0, columnspan=2, sticky="w", pady=3)
+        self.filter_check = ctk.CTkCheckBox(
+            self.crawl_frame,
+            text="",
+            variable=self.disable_filter_var,
+            height=26,
+            checkbox_width=19,
+            checkbox_height=19,
+            font=label_font,
+        )
+        self.filter_check.grid(row=2, column=0, columnspan=2, sticky="w", padx=12, pady=5)
 
-        self.start_date_label = ttk.Label(self.crawl_frame, text="", style="Panel.TLabel")
-        self.start_date_label.grid(row=2, column=0, sticky="w", pady=3)
+        self.start_date_label = label(self.crawl_frame, 3)
         self.start_date_entry = DateEntry(self.crawl_frame, self._t, self.icon_path, date.today())
-        self.start_date_entry.grid(row=2, column=1, sticky="w", pady=3)
-
-        self.end_date_label = ttk.Label(self.crawl_frame, text="", style="Panel.TLabel")
-        self.end_date_label.grid(row=3, column=0, sticky="w", pady=3)
+        self.start_date_entry.grid(row=3, column=1, sticky="w", padx=(4, 12), pady=5)
+        self.end_date_label = label(self.crawl_frame, 4)
         self.end_date_entry = DateEntry(self.crawl_frame, self._t, self.icon_path, date.today())
-        self.end_date_entry.grid(row=3, column=1, sticky="w", pady=3)
+        self.end_date_entry.grid(row=4, column=1, sticky="w", padx=(4, 12), pady=5)
 
         self.spin_vars = {}
-        # name, default, minimum, maximum.  Post-fetch wait and empty-page retry
-        # are intentionally visible because Google sometimes returns a shell page
-        # with no result cards to non-browser HTTP clients.
         engine_key = getattr(self, "_building_context_key", "google")
         restart_default = 0 if engine_key == "baidu" else 4
         max_pages_default = 100 if engine_key == "baidu" else 30
         day_step_default = 0 if engine_key == "baidu" else 7
+        per_page_default = 50 if engine_key == "baidu" else 10
         rows = [
             ("max_pages", max_pages_default, 1, 1000),
             ("day_step", day_step_default, 0, 3650),
-            ("per_page", 50, 1, 100),
+            ("per_page", per_page_default, 1, 100),
             ("timeout", 15, 1, 300),
             ("post_fetch_wait_ms", 800, 0, 60000),
             ("empty_page_retry_count", 2, 0, 10),
@@ -895,45 +1057,51 @@ class BFSUWebLensApp(tk.Tk):
             ("no_new_pages_limit", 1, 1, 10),
             ("selenium_restart_pages", restart_default, 0, 1000),
         ]
-        base = 4
+        base = 5
         for idx, (name, default, min_value, max_value) in enumerate(rows):
-            lab = ttk.Label(self.crawl_frame, text="", style="Panel.TLabel")
-            lab.grid(row=base + idx, column=0, sticky="w", pady=3)
+            row = base + idx
+            lab = label(self.crawl_frame, row)
             setattr(self, f"{name}_label", lab)
             var = tk.IntVar(value=default)
             self.spin_vars[name] = var
-            ttk.Spinbox(self.crawl_frame, from_=min_value, to=max_value, textvariable=var, width=14).grid(row=base + idx, column=1, sticky="w", pady=3)
+            CTkSpinbox(self.crawl_frame, from_=min_value, to=max_value, textvariable=var, width=170).grid(
+                row=row, column=1, sticky="w", padx=(4, 12), pady=5
+            )
 
-        self.max_pages_hint_label = ttk.Label(self.crawl_frame, text="", style="Panel.TLabel", wraplength=360, foreground="#526871")
-        self.max_pages_hint_label.grid(row=base + len(rows), column=0, columnspan=2, sticky="ew", pady=(2, 8))
+        self.max_pages_hint_label = ctk.CTkLabel(
+            self.crawl_frame,
+            text="",
+            wraplength=390,
+            justify="left",
+            anchor="w",
+            text_color=COLOR_MUTED,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+        )
+        self.max_pages_hint_label.grid(row=base + len(rows), column=0, columnspan=2, sticky="ew", padx=12, pady=(2, 8))
 
         self.delay_vars = {}
         delay_defs = [("page_delay", 30000, 90000), ("slice_delay", 30000, 60000), ("error_delay", 60000, 180000)]
         delay_base = base + len(rows) + 1
-        for j, (name, mn, mx) in enumerate(delay_defs, start=delay_base):
-            lab = ttk.Label(self.crawl_frame, text="", style="Panel.TLabel")
-            lab.grid(row=j, column=0, sticky="w", pady=3)
+        for offset, (name, mn, mx) in enumerate(delay_defs):
+            row = delay_base + offset
+            lab = label(self.crawl_frame, row)
             setattr(self, f"{name}_label", lab)
-            box = ttk.Frame(self.crawl_frame, style="Panel.TFrame")
-            box.grid(row=j, column=1, sticky="w", pady=3)
+            box = ctk.CTkFrame(self.crawl_frame, fg_color="transparent")
+            box.grid(row=row, column=1, sticky="w", padx=(4, 12), pady=5)
             vmin = tk.IntVar(value=mn)
             vmax = tk.IntVar(value=mx)
             self.delay_vars[name] = (vmin, vmax)
-            ttk.Spinbox(box, from_=0, to=9999999, textvariable=vmin, width=10).pack(side="left")
-            ttk.Label(box, text=" - ", style="Panel.TLabel").pack(side="left")
-            ttk.Spinbox(box, from_=0, to=9999999, textvariable=vmax, width=10).pack(side="left")
+            CTkSpinbox(box, from_=0, to=9999999, textvariable=vmin, width=132).pack(side="left")
+            ctk.CTkLabel(box, text="–", width=24, font=label_font, text_color=COLOR_MUTED).pack(side="left")
+            CTkSpinbox(box, from_=0, to=9999999, textvariable=vmax, width=132).pack(side="left")
 
-        # Language/country multi-selects.  IMPORTANT: create the Listbox widgets
-        # with the same parent frame that manages their grid.  Previous versions
-        # created them under limit_frame but gridded them inside nested frames,
-        # which could make only the Clear button appear on some Tk builds.
-        self.limit_frame.columnconfigure(0, weight=1)
-        self.language_label = ttk.Label(self.limit_frame, text="", style="Panel.TLabel")
-        self.language_label.grid(row=0, column=0, sticky="w", pady=(0, 3))
-        self.language_box = ttk.Frame(self.limit_frame, style="Panel.TFrame")
-        self.language_box.grid(row=1, column=0, sticky="nsew", pady=(0, 4))
-        self.language_box.columnconfigure(0, weight=1)
-        self.language_box.rowconfigure(0, weight=1)
+        # Google-only language/country multi-selects use native Listbox because CTk has no equivalent.
+        self.limit_frame.grid_columnconfigure(0, weight=1)
+        self.language_label = label(self.limit_frame, 1, columnspan=2, pady=(4, 4))
+        self.language_box = ctk.CTkFrame(self.limit_frame, fg_color="transparent")
+        self.language_box.grid(row=2, column=0, columnspan=2, sticky="nsew", padx=12, pady=(0, 5))
+        self.language_box.grid_columnconfigure(0, weight=1)
+        self.language_box.grid_rowconfigure(0, weight=1)
         self.language_list = tk.Listbox(
             self.language_box,
             selectmode="extended",
@@ -941,22 +1109,29 @@ class BFSUWebLensApp(tk.Tk):
             width=48,
             exportselection=False,
             activestyle="dotbox",
+            font=(FONT_FAMILY, 11),
+            background=COLOR_SURFACE,
+            foreground=COLOR_TEXT,
+            selectbackground="#b7dfe3",
+            selectforeground=COLOR_TEXT,
+            highlightthickness=1,
+            highlightbackground=COLOR_BORDER,
+            relief="flat",
         )
-        lang_sb_y = ttk.Scrollbar(self.language_box, orient="vertical", command=self.language_list.yview)
-        lang_sb_x = ttk.Scrollbar(self.language_box, orient="horizontal", command=self.language_list.xview)
+        lang_sb_y = ctk.CTkScrollbar(self.language_box, orientation="vertical", command=self.language_list.yview)
+        lang_sb_x = ctk.CTkScrollbar(self.language_box, orientation="horizontal", command=self.language_list.xview)
         self.language_list.configure(yscrollcommand=lang_sb_y.set, xscrollcommand=lang_sb_x.set)
         self.language_list.grid(row=0, column=0, sticky="nsew")
-        lang_sb_y.grid(row=0, column=1, sticky="ns")
-        lang_sb_x.grid(row=1, column=0, sticky="ew")
-        self.clear_lang_btn = ttk.Button(self.limit_frame, text="", command=lambda: self.language_list.selection_clear(0, tk.END))
-        self.clear_lang_btn.grid(row=2, column=0, sticky="w", pady=(0, 10))
+        lang_sb_y.grid(row=0, column=1, sticky="ns", padx=(4, 0))
+        lang_sb_x.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.clear_lang_btn = normal_button(self.limit_frame, "", lambda: self.language_list.selection_clear(0, tk.END), width=112)
+        self.clear_lang_btn.grid(row=3, column=0, sticky="w", padx=12, pady=(0, 10))
 
-        self.country_label = ttk.Label(self.limit_frame, text="", style="Panel.TLabel")
-        self.country_label.grid(row=3, column=0, sticky="w", pady=(4, 3))
-        self.country_box = ttk.Frame(self.limit_frame, style="Panel.TFrame")
-        self.country_box.grid(row=4, column=0, sticky="nsew", pady=(0, 4))
-        self.country_box.columnconfigure(0, weight=1)
-        self.country_box.rowconfigure(0, weight=1)
+        self.country_label = label(self.limit_frame, 4, columnspan=2, pady=(4, 4))
+        self.country_box = ctk.CTkFrame(self.limit_frame, fg_color="transparent")
+        self.country_box.grid(row=5, column=0, columnspan=2, sticky="nsew", padx=12, pady=(0, 5))
+        self.country_box.grid_columnconfigure(0, weight=1)
+        self.country_box.grid_rowconfigure(0, weight=1)
         self.country_list = tk.Listbox(
             self.country_box,
             selectmode="extended",
@@ -964,154 +1139,232 @@ class BFSUWebLensApp(tk.Tk):
             width=48,
             exportselection=False,
             activestyle="dotbox",
+            font=(FONT_FAMILY, 11),
+            background=COLOR_SURFACE,
+            foreground=COLOR_TEXT,
+            selectbackground="#b7dfe3",
+            selectforeground=COLOR_TEXT,
+            highlightthickness=1,
+            highlightbackground=COLOR_BORDER,
+            relief="flat",
         )
-        country_sb_y = ttk.Scrollbar(self.country_box, orient="vertical", command=self.country_list.yview)
-        country_sb_x = ttk.Scrollbar(self.country_box, orient="horizontal", command=self.country_list.xview)
+        country_sb_y = ctk.CTkScrollbar(self.country_box, orientation="vertical", command=self.country_list.yview)
+        country_sb_x = ctk.CTkScrollbar(self.country_box, orientation="horizontal", command=self.country_list.xview)
         self.country_list.configure(yscrollcommand=country_sb_y.set, xscrollcommand=country_sb_x.set)
         self.country_list.grid(row=0, column=0, sticky="nsew")
-        country_sb_y.grid(row=0, column=1, sticky="ns")
-        country_sb_x.grid(row=1, column=0, sticky="ew")
-        self.clear_country_btn = ttk.Button(self.limit_frame, text="", command=lambda: self.country_list.selection_clear(0, tk.END))
-        self.clear_country_btn.grid(row=5, column=0, sticky="w", pady=(0, 2))
+        country_sb_y.grid(row=0, column=1, sticky="ns", padx=(4, 0))
+        country_sb_x.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.clear_country_btn = normal_button(self.limit_frame, "", lambda: self.country_list.selection_clear(0, tk.END), width=112)
+        self.clear_country_btn.grid(row=6, column=0, sticky="w", padx=12, pady=(0, 10))
 
-        # Output settings
-        self.output_frame.columnconfigure(0, weight=0, minsize=110)
-        self.output_frame.columnconfigure(1, weight=1)
-        self.output_file_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.output_file_label.grid(row=0, column=0, sticky="w", pady=3)
-        self.output_entry = ttk.Entry(self.output_frame, textvariable=self.output_path)
-        self.output_entry.grid(row=0, column=1, sticky="ew", pady=3)
-        self.browse_button = ttk.Button(self.output_frame, text="", command=self._browse_output)
-        self.browse_button.grid(row=1, column=1, sticky="w", pady=(2, 8))
-        self.output_format_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.output_format_label.grid(row=2, column=0, sticky="w", pady=3)
-        self.output_format_combo = ttk.Combobox(self.output_frame, textvariable=self.output_format, values=OUTPUT_FORMATS, state="readonly", width=14)
-        self.output_format_combo.grid(row=2, column=1, sticky="w", pady=3)
-        self.output_format_combo.bind("<<ComboboxSelected>>", self._on_output_format_changed, add="+")
-        self.content_folder_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.content_folder_label.grid(row=3, column=0, sticky="w", pady=(10, 3))
-        content_dir_frame = ttk.Frame(self.output_frame, style="Panel.TFrame")
-        content_dir_frame.grid(row=3, column=1, sticky="ew", pady=(10, 3))
-        content_dir_frame.columnconfigure(0, weight=1)
-        self.content_dir_entry = ttk.Entry(content_dir_frame, textvariable=self.content_dir_var)
-        self.content_dir_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
-        self.content_browse_button = ttk.Button(content_dir_frame, text="", command=self._browse_content_dir)
-        self.content_browse_button.grid(row=0, column=1, sticky="e")
+        # Output settings.
+        self.output_file_label = label(self.output_frame, 1)
+        self.output_entry = ctk.CTkEntry(self.output_frame, textvariable=self.output_path, height=32, font=input_font)
+        self.output_entry.grid(row=1, column=1, sticky="ew", padx=(4, 12), pady=5)
+        self.browse_button = normal_button(self.output_frame, "", self._browse_output, width=90)
+        self.browse_button.grid(row=2, column=1, sticky="w", padx=(4, 12), pady=(0, 8))
 
-        self.content_threads_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.content_threads_label.grid(row=4, column=0, sticky="w", pady=3)
-        self.content_threads_spin = ttk.Spinbox(self.output_frame, from_=1, to=32, textvariable=self.content_threads_var, width=14)
-        self.content_threads_spin.grid(row=4, column=1, sticky="w", pady=3)
+        self.output_format_label = label(self.output_frame, 3)
+        self.output_format_combo = ctk.CTkComboBox(
+            self.output_frame,
+            variable=self.output_format,
+            values=list(OUTPUT_FORMATS),
+            state="readonly",
+            height=32,
+            width=180,
+            font=input_font,
+            dropdown_font=input_font,
+            command=lambda _value: self._on_output_format_changed(),
+        )
+        self.output_format_combo.grid(row=3, column=1, sticky="w", padx=(4, 12), pady=5)
 
-        self.content_fetch_mode_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.content_fetch_mode_label.grid(row=5, column=0, sticky="w", pady=3)
-        self.content_fetch_mode_combo = ttk.Combobox(self.output_frame, textvariable=self.content_fetch_mode_var, state="readonly", width=34)
-        self.content_fetch_mode_combo.grid(row=5, column=1, sticky="w", pady=3)
+        self.content_folder_label = label(self.output_frame, 4, pady=(11, 5))
+        content_dir_frame = ctk.CTkFrame(self.output_frame, fg_color="transparent")
+        content_dir_frame.grid(row=4, column=1, sticky="ew", padx=(4, 12), pady=(11, 5))
+        content_dir_frame.grid_columnconfigure(0, weight=1)
+        self.content_dir_entry = ctk.CTkEntry(content_dir_frame, textvariable=self.content_dir_var, height=32, font=input_font)
+        self.content_dir_entry.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.content_browse_button = normal_button(content_dir_frame, "", self._browse_content_dir, width=78)
+        self.content_browse_button.grid(row=0, column=1)
 
-        self.content_delay_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.content_delay_label.grid(row=6, column=0, sticky="w", pady=3)
-        content_delay_box = ttk.Frame(self.output_frame, style="Panel.TFrame")
-        content_delay_box.grid(row=6, column=1, sticky="w", pady=3)
-        ttk.Spinbox(content_delay_box, from_=0, to=9999999, textvariable=self.content_delay_min_var, width=10).pack(side="left")
-        ttk.Label(content_delay_box, text=" - ", style="Panel.TLabel").pack(side="left")
-        ttk.Spinbox(content_delay_box, from_=0, to=9999999, textvariable=self.content_delay_max_var, width=10).pack(side="left")
+        self.content_threads_label = label(self.output_frame, 5)
+        self.content_threads_spin = CTkSpinbox(self.output_frame, from_=1, to=32, textvariable=self.content_threads_var, width=170)
+        self.content_threads_spin.grid(row=5, column=1, sticky="w", padx=(4, 12), pady=5)
 
-        self.content_receive_wait_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.content_receive_wait_label.grid(row=7, column=0, sticky="w", pady=3)
-        ttk.Spinbox(self.output_frame, from_=0, to=9999999, textvariable=self.content_receive_wait_var, width=14).grid(row=7, column=1, sticky="w", pady=3)
+        self.content_fetch_mode_label = label(self.output_frame, 6)
+        self.content_fetch_mode_combo = combo(self.output_frame, 6, variable=self.content_fetch_mode_var, width=260)
 
-        self.content_cleaning_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel")
-        self.content_cleaning_label.grid(row=8, column=0, sticky="w", pady=3)
-        self.content_cleaning_combo = ttk.Combobox(self.output_frame, textvariable=self.content_cleaning_var, state="readonly", width=34)
-        self.content_cleaning_combo.grid(row=8, column=1, sticky="w", pady=3)
+        self.content_delay_label = label(self.output_frame, 7)
+        content_delay_box = ctk.CTkFrame(self.output_frame, fg_color="transparent")
+        content_delay_box.grid(row=7, column=1, sticky="w", padx=(4, 12), pady=5)
+        CTkSpinbox(content_delay_box, from_=0, to=9999999, textvariable=self.content_delay_min_var, width=132).pack(side="left")
+        ctk.CTkLabel(content_delay_box, text="–", width=24, font=label_font, text_color=COLOR_MUTED).pack(side="left")
+        CTkSpinbox(content_delay_box, from_=0, to=9999999, textvariable=self.content_delay_max_var, width=132).pack(side="left")
 
-        self.content_selenium_fallback_check = ttk.Checkbutton(self.output_frame, text="", variable=self.content_selenium_fallback_var)
-        self.content_selenium_fallback_check.grid(row=9, column=0, columnspan=2, sticky="w", pady=3)
+        self.content_receive_wait_label = label(self.output_frame, 8)
+        CTkSpinbox(self.output_frame, from_=0, to=9999999, textvariable=self.content_receive_wait_var, width=170).grid(
+            row=8, column=1, sticky="w", padx=(4, 12), pady=5
+        )
+
+        self.content_cleaning_label = label(self.output_frame, 9)
+        self.content_cleaning_combo = combo(self.output_frame, 9, variable=self.content_cleaning_var, width=260)
+
+        self.content_selenium_fallback_check = ctk.CTkCheckBox(
+            self.output_frame,
+            text="",
+            variable=self.content_selenium_fallback_var,
+            height=26,
+            checkbox_width=19,
+            checkbox_height=19,
+            font=label_font,
+        )
+        self.content_selenium_fallback_check.grid(row=10, column=0, columnspan=2, sticky="w", padx=12, pady=5)
         self.content_selenium_fallback_check.grid_remove()
 
-        self.output_hint_label = ttk.Label(self.output_frame, text="", style="Panel.TLabel", wraplength=360, foreground="#526871")
-        self.output_hint_label.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 2))
+        self.output_hint_label = ctk.CTkLabel(
+            self.output_frame,
+            text="",
+            wraplength=390,
+            justify="left",
+            anchor="w",
+            text_color=COLOR_MUTED,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+        )
+        self.output_hint_label.grid(row=11, column=0, columnspan=2, sticky="ew", padx=12, pady=(8, 11))
 
         if getattr(self, "_building_context_key", "google") == "baidu":
-            # Baidu is designed for Chinese web/news discovery; Google-only language
-            # and country/region restrictions are intentionally hidden here.
             self.limit_frame.grid_remove()
 
-        for wheel_widget in (self.query_text, self.language_list, self.country_list):
-            self._bind_mousewheel(wheel_widget)
+        self.settings_scroll.bind_mousewheel_to_descendants()
 
     def _build_results_panel(self, parent):
-        parent.rowconfigure(0, weight=3)
-        parent.rowconfigure(1, weight=2)
-        parent.columnconfigure(0, weight=1)
+        parent.grid_rowconfigure(0, weight=3)
+        parent.grid_rowconfigure(1, weight=2)
+        parent.grid_columnconfigure(0, weight=1)
 
-        self.preview_frame = ttk.LabelFrame(parent, text="Preview", padding=6)
-        self.preview_frame.grid(row=0, column=0, sticky="nsew", pady=(0, 8))
-        self.preview_frame.rowconfigure(1, weight=1)
-        self.preview_frame.columnconfigure(0, weight=1)
+        self.preview_frame = CTkSection(parent, text="Preview")
+        self.preview_frame.grid(row=0, column=0, sticky="nsew", padx=(6, 2), pady=(0, 8))
+        self.preview_frame.grid_rowconfigure(2, weight=1)
+        self.preview_frame.grid_columnconfigure(0, weight=1)
 
-        self.preview_toolbar = ttk.Frame(self.preview_frame, style="Panel.TFrame")
-        self.preview_toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
-        # Compact two-line toolbar: keep all result-preview commands visible on smaller screens.
-        for col in range(10):
-            self.preview_toolbar.columnconfigure(col, weight=0)
-        self.preview_toolbar.columnconfigure(9, weight=1)
+        self.preview_toolbar = ctk.CTkFrame(self.preview_frame, fg_color="#eef5f6", corner_radius=7)
+        self.preview_toolbar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 7))
+        self.preview_toolbar.grid_columnconfigure(0, weight=0)
+        self.preview_toolbar.grid_columnconfigure(1, weight=0)
+        self.preview_toolbar.grid_columnconfigure(2, weight=1)
 
-        self.open_link_button = ttk.Button(self.preview_toolbar, text="", command=self._open_selected_link, style="Preview.TButton")
-        self.open_link_button.grid(row=0, column=0, padx=(0, 4), pady=(0, 2), sticky="w")
-        self.delete_selected_button = ttk.Button(self.preview_toolbar, text="", command=self._delete_selected_records, style="Preview.TButton")
-        self.delete_selected_button.grid(row=0, column=1, padx=(0, 8), pady=(0, 2), sticky="w")
+        toolbar_font = ctk.CTkFont(family=FONT_FAMILY, size=11)
+        group_font = ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold")
 
-        self.sort_label = ttk.Label(self.preview_toolbar, text="", style="Preview.TLabel")
-        self.sort_label.grid(row=0, column=2, padx=(0, 4), pady=(0, 2), sticky="w")
-        self.sort_time_button = ttk.Button(self.preview_toolbar, text="", command=lambda: self._sort_records("time"), style="Preview.TButton")
-        self.sort_time_button.grid(row=0, column=3, padx=(0, 4), pady=(0, 2), sticky="w")
-        self.sort_title_button = ttk.Button(self.preview_toolbar, text="", command=lambda: self._sort_records("title"), style="Preview.TButton")
-        self.sort_title_button.grid(row=0, column=4, padx=(0, 4), pady=(0, 2), sticky="w")
-        self.sort_source_button = ttk.Button(self.preview_toolbar, text="", command=lambda: self._sort_records("source"), style="Preview.TButton")
-        self.sort_source_button.grid(row=0, column=5, padx=(0, 8), pady=(0, 2), sticky="w")
+        def toolbar_group(row, column, *, columnspan=1, sticky="w"):
+            frame = ctk.CTkFrame(
+                self.preview_toolbar,
+                fg_color=COLOR_SURFACE,
+                border_color=COLOR_BORDER,
+                border_width=1,
+                corner_radius=6,
+            )
+            frame.grid(row=row, column=column, columnspan=columnspan, padx=5, pady=4, sticky=sticky)
+            return frame
 
-        self.result_edit_menu = tk.Menu(self, tearoff=False)
+        def small_button(master, command, *, width=72):
+            return ctk.CTkButton(
+                master,
+                text="",
+                command=command,
+                width=width,
+                height=28,
+                font=toolbar_font,
+                **ctk_button_colors(),
+            )
+
+        # Row 1: selection/editing and sorting are separate visual groups.
+        record_group = toolbar_group(0, 0)
+        self.record_group_label = ctk.CTkLabel(record_group, text="", font=group_font, text_color=COLOR_ACCENT)
+        self.record_group_label.grid(row=0, column=0, padx=(8, 5), pady=5)
+        self.open_link_button = small_button(record_group, self._open_selected_link, width=68)
+        self.open_link_button.grid(row=0, column=1, padx=2, pady=4)
+        self.delete_selected_button = small_button(record_group, self._delete_selected_records, width=72)
+        self.delete_selected_button.grid(row=0, column=2, padx=2, pady=4)
+
+        self.result_edit_menu = DpiAwareMenu(self, tearoff=False)
         self.result_edit_menu.add_command(label="Undo", accelerator="Ctrl+Z", command=self._undo_result_edit)
         self.result_edit_menu.add_command(label="Redo", accelerator="Ctrl+Y", command=self._redo_result_edit)
         self.result_edit_menu.add_separator()
         self.result_edit_menu.add_command(label="Reset", accelerator="Ctrl+Shift+R", command=self._reset_result_preview)
-        self.result_edit_button = ttk.Menubutton(self.preview_toolbar, text="", menu=self.result_edit_menu, style="Preview.TMenubutton")
-        self.result_edit_button.grid(row=0, column=6, padx=(0, 4), pady=(0, 2), sticky="w")
-        self.preview_count_var = tk.StringVar(value="")
-        self.preview_count_label = ttk.Label(self.preview_toolbar, textvariable=self.preview_count_var, style="Preview.TLabel")
-        self.preview_count_label.grid(row=0, column=7, columnspan=3, padx=(10, 2), pady=(0, 2), sticky="e")
+        self.result_edit_button = small_button(record_group, self._popup_result_edit_menu, width=68)
+        self.result_edit_button.grid(row=0, column=3, padx=(2, 6), pady=4)
 
-        self.sample_scheme_label = ttk.Label(self.preview_toolbar, text="", style="Preview.TLabel")
-        self.sample_scheme_label.grid(row=1, column=0, padx=(0, 4), pady=(0, 0), sticky="w")
+        sort_group = toolbar_group(0, 1)
+        self.sort_group_label = ctk.CTkLabel(sort_group, text="", font=group_font, text_color=COLOR_ACCENT)
+        self.sort_group_label.grid(row=0, column=0, padx=(8, 5), pady=5)
+        self.sort_label = ctk.CTkLabel(sort_group, text="", font=toolbar_font, text_color=COLOR_MUTED)
+        self.sort_label.grid(row=0, column=4, padx=0, pady=0)
+        self.sort_label.grid_remove()
+        self.sort_time_button = small_button(sort_group, lambda: self._sort_records("time"), width=60)
+        self.sort_time_button.grid(row=0, column=1, padx=2, pady=4)
+        self.sort_title_button = small_button(sort_group, lambda: self._sort_records("title"), width=60)
+        self.sort_title_button.grid(row=0, column=2, padx=2, pady=4)
+        self.sort_source_button = small_button(sort_group, lambda: self._sort_records("source"), width=68)
+        self.sort_source_button.grid(row=0, column=3, padx=(2, 6), pady=4)
+
+        self.preview_count_var = tk.StringVar(value="")
+        self.preview_count_label = ctk.CTkLabel(
+            self.preview_toolbar,
+            textvariable=self.preview_count_var,
+            font=toolbar_font,
+            text_color=COLOR_MUTED,
+        )
+        self.preview_count_label.grid(row=0, column=2, padx=(8, 10), pady=5, sticky="e")
+
+        # Row 2: sampling is isolated from ordinary row actions.
+        sample_group = toolbar_group(1, 0, columnspan=3, sticky="w")
+        self.sample_group_label = ctk.CTkLabel(sample_group, text="", font=group_font, text_color=COLOR_ACCENT)
+        self.sample_group_label.grid(row=0, column=0, padx=(8, 5), pady=5)
+        self.sample_scheme_label = ctk.CTkLabel(sample_group, text="", font=toolbar_font, text_color=COLOR_MUTED)
+        self.sample_scheme_label.grid(row=0, column=1, padx=(2, 3), pady=5)
         self.sample_scheme_var = tk.StringVar()
-        self.sample_scheme_combo = ttk.Combobox(self.preview_toolbar, textvariable=self.sample_scheme_var, state="readonly", width=14)
-        self.sample_scheme_combo.grid(row=1, column=1, columnspan=2, padx=(0, 6), pady=(0, 0), sticky="w")
-        self.sample_count_label = ttk.Label(self.preview_toolbar, text="", style="Preview.TLabel")
-        self.sample_count_label.grid(row=1, column=3, padx=(0, 4), pady=(0, 0), sticky="w")
+        self.sample_scheme_combo = ctk.CTkComboBox(
+            sample_group,
+            variable=self.sample_scheme_var,
+            values=[""],
+            state="readonly",
+            width=165,
+            height=28,
+            font=toolbar_font,
+            dropdown_font=toolbar_font,
+        )
+        self.sample_scheme_combo.grid(row=0, column=2, padx=3, pady=4)
+        self.sample_count_label = ctk.CTkLabel(sample_group, text="", font=toolbar_font, text_color=COLOR_MUTED)
+        self.sample_count_label.grid(row=0, column=3, padx=(8, 3), pady=5)
         self.sample_count_var = tk.IntVar(value=20)
-        self.sample_count_spin = ttk.Spinbox(self.preview_toolbar, from_=1, to=1000000, textvariable=self.sample_count_var, width=7)
-        self.sample_count_spin.grid(row=1, column=4, padx=(0, 6), pady=(0, 0), sticky="w")
-        self.sample_button = ttk.Button(self.preview_toolbar, text="", command=self._sample_records, style="Preview.TButton")
-        self.sample_button.grid(row=1, column=5, padx=(0, 6), pady=(0, 0), sticky="w")
-        self.download_content_button = ttk.Button(self.preview_toolbar, text="", command=self._download_selected_content, style="Preview.TButton")
-        self.download_content_button.grid(row=1, column=6, padx=(0, 6), pady=(0, 0), sticky="w")
-        self.download_all_content_button = ttk.Button(self.preview_toolbar, text="", command=self._download_all_content, style="Preview.TButton")
-        self.download_all_content_button.grid(row=1, column=7, padx=(0, 6), pady=(0, 0), sticky="w")
-        self.download_settings_button = ttk.Button(self.preview_toolbar, text="", command=self._open_content_settings_dialog, style="Preview.TButton")
-        self.download_settings_button.grid(row=1, column=8, padx=(0, 6), pady=(0, 0), sticky="w")
+        self.sample_count_spin = CTkSpinbox(sample_group, from_=1, to=1000000, textvariable=self.sample_count_var, width=100)
+        self.sample_count_spin.grid(row=0, column=4, padx=3, pady=4)
+        self.sample_button = small_button(sample_group, self._sample_records, width=68)
+        self.sample_button.grid(row=0, column=5, padx=(3, 6), pady=4)
+
+        # Row 3: all full-text download actions share a dedicated group.
+        download_group = toolbar_group(2, 0, columnspan=3, sticky="w")
+        self.download_group_label = ctk.CTkLabel(download_group, text="", font=group_font, text_color=COLOR_ACCENT)
+        self.download_group_label.grid(row=0, column=0, padx=(8, 5), pady=5)
+        self.download_content_button = small_button(download_group, self._download_selected_content, width=112)
+        self.download_content_button.grid(row=0, column=1, padx=2, pady=4)
+        self.download_all_content_button = small_button(download_group, self._download_all_content, width=102)
+        self.download_all_content_button.grid(row=0, column=2, padx=2, pady=4)
+        self.download_settings_button = small_button(download_group, self._open_content_settings_dialog, width=108)
+        self.download_settings_button.grid(row=0, column=3, padx=(2, 6), pady=4)
 
         columns = ("no", "time", "title", "source", "published", "status", "words", "quality", "link")
-        self.tree = ttk.Treeview(self.preview_frame, columns=columns, show="headings", height=16, selectmode="extended")
+        self.tree = DpiAwareTreeview(self.preview_frame, columns=columns, show="headings", height=16, selectmode="extended")
         for col, width in [("no", 58), ("time", 140), ("title", 330), ("source", 120), ("published", 110), ("status", 95), ("words", 70), ("quality", 70), ("link", 420)]:
             self.tree.heading(col, text=col, command=lambda c=col: self._sort_records("time" if c in ("published", "no") else c if c in ("title", "source") else "time"))
-            self.tree.column(col, width=width, stretch=(col not in {"no", "words", "quality"}))
-        ysb = ttk.Scrollbar(self.preview_frame, orient="vertical", command=self.tree.yview)
-        xsb = ttk.Scrollbar(self.preview_frame, orient="horizontal", command=self.tree.xview)
+            self.tree.logical_column(col, width=width, minwidth=48, stretch=(col not in {"no", "words", "quality"}))
+        ysb = ctk.CTkScrollbar(self.preview_frame, orientation="vertical", command=self.tree.yview)
+        xsb = ctk.CTkScrollbar(self.preview_frame, orientation="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=ysb.set, xscrollcommand=xsb.set)
-        self.tree.grid(row=1, column=0, sticky="nsew")
-        ysb.grid(row=1, column=1, sticky="ns")
-        xsb.grid(row=2, column=0, sticky="ew")
+        self.tree.grid(row=2, column=0, sticky="nsew", padx=(8, 3), pady=(0, 3))
+        ysb.grid(row=2, column=1, sticky="ns", padx=(0, 6), pady=(0, 3))
+        xsb.grid(row=3, column=0, sticky="ew", padx=(8, 3), pady=(0, 7))
         self.tree.bind("<Double-1>", lambda _e: self._open_selected_link(), add="+")
         self.tree.bind("<Return>", lambda _e: self._open_selected_link(), add="+")
         self.tree.bind("<Delete>", lambda _e: self._delete_selected_records(), add="+")
@@ -1119,7 +1372,7 @@ class BFSUWebLensApp(tk.Tk):
         self.tree.bind("<<TreeviewSelect>>", lambda _e: self._update_preview_count(), add="+")
         self._bind_mousewheel(self.tree)
 
-        self.result_menu = tk.Menu(self, tearoff=False)
+        self.result_menu = DpiAwareMenu(self, tearoff=False)
         self.result_menu.add_command(label="Open link", command=self._open_selected_link)
         self.result_menu.add_command(label="Download selected content", command=self._download_selected_content)
         self.result_menu.add_command(label="Download all content", command=self._download_all_content)
@@ -1135,16 +1388,32 @@ class BFSUWebLensApp(tk.Tk):
         self.result_menu.add_command(label="Sort by title", command=lambda: self._sort_records("title"))
         self.result_menu.add_command(label="Sort by source", command=lambda: self._sort_records("source"))
 
-        self.log_frame = ttk.LabelFrame(parent, text="Log", padding=6)
-        self.log_frame.grid(row=1, column=0, sticky="nsew")
-        self.log_frame.rowconfigure(0, weight=1)
-        self.log_frame.columnconfigure(0, weight=1)
-        self.log_text = tk.Text(self.log_frame, height=9, wrap="word", font=("Consolas", 9))
-        log_sb = ttk.Scrollbar(self.log_frame, orient="vertical", command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=log_sb.set)
-        self.log_text.grid(row=0, column=0, sticky="nsew")
-        log_sb.grid(row=0, column=1, sticky="ns")
-        self._bind_mousewheel(self.log_text)
+        self.log_frame = CTkSection(parent, text="Log")
+        self.log_frame.grid(row=1, column=0, sticky="nsew", padx=(6, 2), pady=(0, 2))
+        self.log_frame.grid_rowconfigure(1, weight=1)
+        self.log_frame.grid_columnconfigure(0, weight=1)
+        self.log_text = ctk.CTkTextbox(
+            self.log_frame,
+            height=150,
+            wrap="word",
+            font=ctk.CTkFont(family="Consolas", size=12),
+            fg_color=COLOR_SURFACE,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            text_color=COLOR_TEXT,
+        )
+        self.log_text.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+
+    def _popup_result_edit_menu(self):
+        try:
+            x = self.result_edit_button.winfo_rootx()
+            y = self.result_edit_button.winfo_rooty() + self.result_edit_button.winfo_height()
+            self.result_edit_menu.tk_popup(x, y)
+        finally:
+            try:
+                self.result_edit_menu.grab_release()
+            except Exception:
+                pass
 
     def _t(self, key):
         return t(self.ui_lang, key)
@@ -1153,11 +1422,6 @@ class BFSUWebLensApp(tk.Tk):
         old_lang = getattr(self, "ui_lang", lang)
         self.ui_lang = lang
         self.ui_lang_var.set(lang)
-        try:
-            self.notebook.tab(0, text=t(lang, "google_tab"))
-            self.notebook.tab(1, text=t(lang, "baidu_tab"))
-        except Exception:
-            pass
         self._rebuild_menu_labels()
         active_key = getattr(self, "active_context_key", None) or "google"
         for key in ("google", "baidu"):
@@ -1234,6 +1498,11 @@ class BFSUWebLensApp(tk.Tk):
             self.import_links_button: "preview_import_short",
             self.clear_button: "clear",
             self.open_button: "open_output",
+            self.open_download_button: "open_download_folder",
+            self.record_group_label: "preview_records_group",
+            self.sort_group_label: "preview_sort_group",
+            self.sample_group_label: "preview_sample_group",
+            self.download_group_label: "preview_download_group",
             self.open_link_button: "preview_open_short",
             self.delete_selected_button: "preview_delete_short",
             self.sort_label: "preview_sort_label",
@@ -1250,7 +1519,7 @@ class BFSUWebLensApp(tk.Tk):
         }
         for widget, key in mapping.items():
             try:
-                widget.config(text=t(lang, key))
+                widget.configure(text=t(lang, key))
             except Exception:
                 pass
         if lang == "zh_sim":
@@ -1265,13 +1534,13 @@ class BFSUWebLensApp(tk.Tk):
         try:
             for c, h in heads.items():
                 self.tree.heading(c, text=h)
-            self.toolbar_progress_label.config(text=progress_text)
+            self.toolbar_progress_label.configure(text=progress_text)
         except Exception:
             pass
         self._update_preview_count()
         if hasattr(self, "sample_scheme_combo"):
             current_key = self._current_sample_scheme_key()
-            self.sample_scheme_combo["values"] = [t(lang, k) for k in ("sample_simple", "sample_systematic", "sample_by_source")]
+            self.sample_scheme_combo.configure(values=[t(lang, k) for k in ("sample_simple", "sample_systematic", "sample_by_source")])
             key_to_label = {"simple": t(lang, "sample_simple"), "systematic": t(lang, "sample_systematic"), "source": t(lang, "sample_by_source")}
             self.sample_scheme_combo.set(key_to_label.get(current_key, t(lang, "sample_simple")))
         if hasattr(self, "result_edit_menu"):
@@ -1365,12 +1634,12 @@ class BFSUWebLensApp(tk.Tk):
 
         if query_key not in {opt.get("key") for opt in query_options}:
             query_key = "single"
-        self.query_mode_combo["values"] = labels_for(query_options, lang)
+        self.query_mode_combo.configure(values=labels_for(query_options, lang))
         for opt in query_options:
             if opt.get("key") == query_key:
                 self.query_mode_combo.set(label_for(opt, lang))
                 break
-        self.vertical_combo["values"] = labels_for(vertical_options, lang)
+        self.vertical_combo.configure(values=labels_for(vertical_options, lang))
         if vertical_key not in {opt.get("key") for opt in vertical_options}:
             vertical_key = default_vertical
         for opt in vertical_options:
@@ -1379,17 +1648,17 @@ class BFSUWebLensApp(tk.Tk):
                 break
         if hasattr(self, "baidu_sort_combo"):
             current_baidu_sort = self._current_combo_key(self.baidu_sort_combo, BAIDU_SORT_OPTIONS, previous_lang or lang, self.settings.get("baidu_sort", self.defaults.get("baidu_sort", "focus"))) if self.baidu_sort_combo.get() else self.settings.get("baidu_sort", self.defaults.get("baidu_sort", "focus"))
-            self.baidu_sort_combo["values"] = labels_for(BAIDU_SORT_OPTIONS, lang)
+            self.baidu_sort_combo.configure(values=labels_for(BAIDU_SORT_OPTIONS, lang))
             self._set_combo_by_key(self.baidu_sort_combo, BAIDU_SORT_OPTIONS, current_baidu_sort)
-        self.backend_combo["values"] = labels_for(FETCH_BACKEND_OPTIONS, lang)
+        self.backend_combo.configure(values=labels_for(FETCH_BACKEND_OPTIONS, lang))
         for opt in FETCH_BACKEND_OPTIONS:
             if opt.get("key") == backend_key:
                 self.backend_combo.set(label_for(opt, lang))
         if hasattr(self, "content_fetch_mode_combo"):
-            self.content_fetch_mode_combo["values"] = labels_for(CONTENT_FETCH_MODE_OPTIONS, lang)
+            self.content_fetch_mode_combo.configure(values=labels_for(CONTENT_FETCH_MODE_OPTIONS, lang))
             self._set_combo_by_key(self.content_fetch_mode_combo, CONTENT_FETCH_MODE_OPTIONS, content_fetch_key)
         if hasattr(self, "content_cleaning_combo"):
-            self.content_cleaning_combo["values"] = labels_for(CONTENT_CLEANING_OPTIONS, lang)
+            self.content_cleaning_combo.configure(values=labels_for(CONTENT_CLEANING_OPTIONS, lang))
             self._set_combo_by_key(self.content_cleaning_combo, CONTENT_CLEANING_OPTIONS, content_cleaning_key)
 
         self.current_language_options = self._sort_options_for_ui(LANGUAGE_OPTIONS, lang, "lr")
@@ -1408,41 +1677,107 @@ class BFSUWebLensApp(tk.Tk):
                 self.country_list.selection_set(i)
 
     def _show_text_window(self, title, text, geometry="880x680"):
-        win = tk.Toplevel(self)
+        win = ctk.CTkToplevel(self)
         win.title(title)
-        win.geometry(geometry)
         win.transient(self)
+        win.resizable(True, True)
         self._apply_icon(win)
-        frame = ttk.Frame(win, padding=10)
-        frame.pack(fill="both", expand=True)
-        txt = tk.Text(frame, wrap="word", font=("Segoe UI", 10))
-        sb = ttk.Scrollbar(frame, orient="vertical", command=txt.yview)
-        txt.configure(yscrollcommand=sb.set)
-        txt.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        root = ctk.CTkFrame(win, fg_color=COLOR_BG, corner_radius=0)
+        root.pack(fill="both", expand=True, padx=14, pady=14)
+        txt = ctk.CTkTextbox(
+            root,
+            wrap="word",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+            fg_color=COLOR_SURFACE,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            text_color=COLOR_TEXT,
+        )
+        txt.pack(fill="both", expand=True)
         txt.insert("1.0", text)
-        txt.config(state="disabled")
+        txt.configure(state="disabled")
+        ctk.CTkButton(
+            root,
+            text=t(self.ui_lang, "close"),
+            command=win.destroy,
+            width=96,
+            height=32,
+            **ctk_button_colors(),
+        ).pack(anchor="e", pady=(10, 0))
+        try:
+            width, height = (int(value) for value in geometry.lower().split("x", 1))
+        except Exception:
+            width, height = 880, 680
+        fit_window_to_screen(win, requested_width=width, requested_height=height, parent=self, min_width=620, min_height=440)
+        win.lift()
+        win.focus_force()
 
     def _show_about(self):
-        win = tk.Toplevel(self)
+        win = ctk.CTkToplevel(self)
         win.title(t(self.ui_lang, "menu_about"))
-        win.geometry("800x600")
         win.transient(self)
+        win.resizable(True, True)
         self._apply_icon(win)
-        header = tk.Frame(win, bg=self.colors["navy"], padx=18, pady=14)
-        header.pack(fill="x")
-        tk.Label(header, text="BFSU WebLens", bg=self.colors["navy"], fg="white", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-        tk.Label(header, text=t(self.ui_lang, "subtitle"), bg=self.colors["navy"], fg="#D8E3E8", font=("Segoe UI", 10)).pack(anchor="w", pady=(2, 0))
-        body = ttk.Frame(win, padding=12)
-        body.pack(fill="both", expand=True)
-        txt = tk.Text(body, wrap="word", font=("Segoe UI", 10), relief="flat", padx=8, pady=8)
-        sb = ttk.Scrollbar(body, orient="vertical", command=txt.yview)
-        txt.configure(yscrollcommand=sb.set)
-        txt.pack(side="left", fill="both", expand=True)
-        sb.pack(side="right", fill="y")
+        root = ctk.CTkFrame(win, fg_color=COLOR_BG, corner_radius=0)
+        root.pack(fill="both", expand=True, padx=18, pady=18)
+
+        top = ctk.CTkFrame(root, fg_color="transparent")
+        top.pack(fill="x", pady=(0, 12))
+        self._about_logo_image = None
+        logo_path = resource_path("assets/logo.png")
+        if os.path.exists(logo_path):
+            try:
+                pil_image = Image.open(logo_path)
+                self._about_logo_image = ctk.CTkImage(light_image=pil_image, dark_image=pil_image, size=(118, 118))
+                ctk.CTkLabel(top, image=self._about_logo_image, text="").pack(side="left", padx=(0, 16))
+            except Exception:
+                self._about_logo_image = None
+        heading = ctk.CTkFrame(top, fg_color="transparent")
+        heading.pack(side="left", fill="x", expand=True, anchor="w")
+        ctk.CTkLabel(
+            heading,
+            text="BFSU WebLens",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=24, weight="bold"),
+            text_color=COLOR_ACCENT,
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            heading,
+            text=t(self.ui_lang, "subtitle"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+            text_color=COLOR_MUTED,
+            justify="left",
+            wraplength=560,
+        ).pack(anchor="w", pady=(3, 0))
+        ctk.CTkLabel(
+            heading,
+            text="Dr. Liu Dingjia / 刘鼎甲 博士  ·  djliu@bfsu.edu.cn",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            text_color=COLOR_TEXT,
+        ).pack(anchor="w", pady=(8, 0))
+
+        txt = ctk.CTkTextbox(
+            root,
+            wrap="word",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+            fg_color=COLOR_SURFACE,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            text_color=COLOR_TEXT,
+        )
+        txt.pack(fill="both", expand=True, pady=(0, 12))
         txt.insert("1.0", t(self.ui_lang, "about"))
-        txt.config(state="disabled")
-        self._bind_mousewheel(txt)
+        txt.configure(state="disabled")
+        ctk.CTkButton(
+            root,
+            text=t(self.ui_lang, "close"),
+            command=win.destroy,
+            width=100,
+            height=32,
+            **ctk_button_colors(),
+        ).pack(anchor="e")
+        fit_window_to_screen(win, requested_width=900, requested_height=760, parent=self, min_width=700, min_height=560)
+        win.lift()
+        win.focus_force()
 
     def _show_user_guide(self):
         self._show_text_window(t(self.ui_lang, "user_guide_title"), t(self.ui_lang, "user_guide_text"), "920x720")
@@ -1456,26 +1791,63 @@ class BFSUWebLensApp(tk.Tk):
         self._show_text_window(title, text, "820x620")
 
     def _show_settings(self):
-        win = tk.Toplevel(self)
+        win = ctk.CTkToplevel(self)
         win.title(t(self.ui_lang, "settings_title"))
-        win.geometry("820x420")
         win.transient(self)
+        win.resizable(True, True)
+        win.grab_set()
         self._apply_icon(win)
-        frame = ttk.Frame(win, padding=14)
-        frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text=t(self.ui_lang, "settings_title"), font=("Segoe UI", 13, "bold")).pack(anchor="w", pady=(0, 8))
-        ttk.Label(frame, text=t(self.ui_lang, "settings_saved_hint"), wraplength=760).pack(anchor="w", pady=(0, 10))
-        ttk.Label(frame, text=t(self.ui_lang, "user_agent_label")).pack(anchor="w")
-        txt = tk.Text(frame, height=5, wrap="word", font=("Consolas", 9))
-        txt.pack(fill="both", expand=True, pady=(4, 8))
+
+        root = ctk.CTkFrame(win, fg_color=COLOR_BG, corner_radius=0)
+        root.pack(fill="both", expand=True, padx=16, pady=16)
+        body = ctk.CTkScrollableFrame(root, fg_color=COLOR_PANEL, corner_radius=7)
+        body.pack(fill="both", expand=True)
+        ctk.CTkLabel(
+            body,
+            text=t(self.ui_lang, "settings_title"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=18, weight="bold"),
+            text_color=COLOR_ACCENT,
+        ).pack(anchor="w", padx=12, pady=(12, 5))
+        ctk.CTkLabel(
+            body,
+            text=t(self.ui_lang, "settings_saved_hint"),
+            wraplength=790,
+            justify="left",
+            anchor="w",
+            text_color=COLOR_MUTED,
+        ).pack(fill="x", padx=12, pady=(0, 12))
+        section = CTkSection(body, text=t(self.ui_lang, "user_agent_label"))
+        section.pack(fill="x", padx=8, pady=(0, 10))
+        txt = ctk.CTkTextbox(
+            section,
+            height=170,
+            wrap="word",
+            font=ctk.CTkFont(family="Consolas", size=12),
+            fg_color=COLOR_SURFACE,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            text_color=COLOR_TEXT,
+        )
+        txt.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 8))
+        section.grid_columnconfigure(0, weight=1)
         txt.insert("1.0", self.user_agent_var.get())
-        self._bind_mousewheel(txt)
-        hint = ttk.Label(frame, text=t(self.ui_lang, "user_agent_hint"), wraplength=760)
-        hint.pack(anchor="w", pady=(0, 8))
-        path_hint = ttk.Label(frame, text=t(self.ui_lang, "settings_file_hint", path=str(self.settings_path)), wraplength=760)
-        path_hint.pack(anchor="w", pady=(0, 8))
-        btns = ttk.Frame(frame)
-        btns.pack(fill="x")
+        ctk.CTkLabel(
+            section,
+            text=t(self.ui_lang, "user_agent_hint"),
+            wraplength=760,
+            justify="left",
+            anchor="w",
+            text_color=COLOR_MUTED,
+        ).grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 8))
+        ctk.CTkLabel(
+            section,
+            text=t(self.ui_lang, "settings_file_hint", path=str(self.settings_path)),
+            wraplength=760,
+            justify="left",
+            anchor="w",
+            text_color=COLOR_MUTED,
+        ).grid(row=3, column=0, sticky="ew", padx=12, pady=(0, 12))
+
         def apply_settings(close=False):
             value = txt.get("1.0", "end").strip() or DEFAULT_USER_AGENT
             self.user_agent_var.set(value)
@@ -1483,11 +1855,30 @@ class BFSUWebLensApp(tk.Tk):
             self._log(t(self.ui_lang, "settings_saved"))
             if close:
                 win.destroy()
-        ttk.Button(btns, text=t(self.ui_lang, "reset_default"), command=lambda: (txt.delete("1.0", "end"), txt.insert("1.0", DEFAULT_USER_AGENT))).pack(side="left")
-        ttk.Button(btns, text=t(self.ui_lang, "reset_all_defaults"), command=lambda: self._reset_all_settings_to_defaults(win)).pack(side="left", padx=(8, 0))
-        ttk.Button(btns, text=t(self.ui_lang, "apply"), command=lambda: apply_settings(False)).pack(side="right", padx=(6, 0))
-        ttk.Button(btns, text=t(self.ui_lang, "ok"), command=lambda: apply_settings(True)).pack(side="right", padx=(6, 0))
-        ttk.Button(btns, text=t(self.ui_lang, "close"), command=win.destroy).pack(side="right")
+
+        btns = ctk.CTkFrame(root, fg_color="transparent")
+        btns.pack(fill="x", pady=(10, 0))
+        ctk.CTkButton(
+            btns,
+            text=t(self.ui_lang, "reset_default"),
+            command=lambda: (txt.delete("1.0", "end"), txt.insert("1.0", DEFAULT_USER_AGENT)),
+            height=32,
+            **ctk_button_colors(),
+        ).pack(side="left")
+        ctk.CTkButton(
+            btns,
+            text=t(self.ui_lang, "reset_all_defaults"),
+            command=lambda: self._reset_all_settings_to_defaults(win),
+            height=32,
+            **ctk_button_colors("danger"),
+        ).pack(side="left", padx=(8, 0))
+        ctk.CTkButton(btns, text=t(self.ui_lang, "close"), command=win.destroy, width=88, height=32, **ctk_button_colors()).pack(side="right")
+        ctk.CTkButton(btns, text=t(self.ui_lang, "ok"), command=lambda: apply_settings(True), width=88, height=32, **ctk_button_colors("accent")).pack(side="right", padx=(0, 8))
+        ctk.CTkButton(btns, text=t(self.ui_lang, "apply"), command=lambda: apply_settings(False), width=88, height=32, **ctk_button_colors()).pack(side="right", padx=(0, 8))
+        fit_window_to_screen(win, requested_width=920, requested_height=620, parent=self, min_width=700, min_height=480)
+        win.bind("<Escape>", lambda _e: win.destroy())
+        win.lift()
+        win.focus_force()
 
     def _bind_shortcuts(self):
         self.bind_all("<F5>", lambda _e: self._start_crawl())
@@ -1580,7 +1971,7 @@ class BFSUWebLensApp(tk.Tk):
     def _get_site_filters_text(self) -> str:
         """Return the multi-line site/domain filter text from the active panel."""
         try:
-            if isinstance(self.site_entry, tk.Text):
+            if isinstance(self.site_entry, (tk.Text, ctk.CTkTextbox)):
                 text = self.site_entry.get("1.0", "end").strip()
                 self.site_var.set(text)
                 return text
@@ -1599,7 +1990,7 @@ class BFSUWebLensApp(tk.Tk):
         except Exception:
             pass
         try:
-            if isinstance(self.site_entry, tk.Text):
+            if isinstance(self.site_entry, (tk.Text, ctk.CTkTextbox)):
                 self.site_entry.delete("1.0", "end")
                 if text:
                     self.site_entry.insert("1.0", text)
@@ -1714,11 +2105,11 @@ class BFSUWebLensApp(tk.Tk):
         self._clear_tree()
         self.log_text.delete("1.0", "end")
         self.stop_event.clear()
-        self.progress.config(mode="determinate", maximum=100, value=0)
-        self.toolbar_progress.config(maximum=100, value=0)
+        self.progress.configure(mode="determinate", maximum=100, value=0)
+        self.toolbar_progress.configure(maximum=100, value=0)
         self.status_var.set(t(self.ui_lang, "status_running"))
-        self.start_button.config(state="disabled")
-        self.stop_button.config(state="normal")
+        self.start_button.configure(state="disabled")
+        self.stop_button.configure(state="normal")
         self._sync_active_context_state()
         ctx_key = getattr(self, "active_context_key", "google")
         self.worker_context_key = ctx_key
@@ -1766,8 +2157,8 @@ class BFSUWebLensApp(tk.Tk):
 
     def _set_progress(self, value, maximum=100):
         value = max(0, min(value, maximum))
-        self.progress.config(maximum=maximum, value=value)
-        self.toolbar_progress.config(maximum=maximum, value=value)
+        self.progress.configure(maximum=maximum, value=value)
+        self.toolbar_progress.configure(maximum=maximum, value=value)
 
     def _handle_event(self, item):
         if isinstance(item, tuple):
@@ -1811,6 +2202,16 @@ class BFSUWebLensApp(tk.Tk):
                     self._log(t(self.ui_lang, "checkpoint_saved", n=len(self.records), path=self.output_path.get().strip()))
                 except Exception as e:
                     self._log("[CHECKPOINT EXPORT ERROR] " + str(e))
+        elif event.event_type == "verification_wait":
+            self._log("[VERIFICATION WAIT] " + event.message)
+            self.status_var.set(t(self.ui_lang, "verification_wait_status"))
+            messagebox.showwarning(
+                t(self.ui_lang, "verification_wait_title"),
+                t(self.ui_lang, "verification_wait_message"),
+            )
+        elif event.event_type == "verification_passed":
+            self._log("[VERIFICATION PASSED] " + event.message)
+            self.status_var.set(t(self.ui_lang, "status_running"))
         elif event.event_type == "blocked":
             self._log("[BLOCKED] " + event.message)
             messagebox.showwarning(APP_NAME, event.message)
@@ -1823,12 +2224,12 @@ class BFSUWebLensApp(tk.Tk):
     def _on_finished(self):
         if self.stop_event.is_set():
             self.status_var.set(t(self.ui_lang, "status_stopped"))
-            self.start_button.config(state="normal")
-            self.stop_button.config(state="disabled")
+            self.start_button.configure(state="normal")
+            self.stop_button.configure(state="disabled")
             return
         self._set_progress(100, 100)
-        self.start_button.config(state="normal")
-        self.stop_button.config(state="disabled")
+        self.start_button.configure(state="normal")
+        self.stop_button.configure(state="disabled")
         if self.records:
             try:
                 self._export_results(show_message=False)
@@ -2067,17 +2468,14 @@ class BFSUWebLensApp(tk.Tk):
         return opt.get("key") if opt else default_key
 
     def _show_content_settings_dialog(self, *, title_key: str = "download_settings_title") -> bool:
-        """Show a modal content-download settings dialog and persist choices."""
+        """Show a complete, DPI-safe CTk content-download settings dialog."""
         lang = self.ui_lang
-        dialog = tk.Toplevel(self)
+        dialog = ctk.CTkToplevel(self)
         dialog.title(t(lang, title_key))
         dialog.transient(self)
         dialog.grab_set()
-        dialog.resizable(False, False)
-
-        frm = ttk.Frame(dialog, padding=14)
-        frm.grid(row=0, column=0, sticky="nsew")
-        frm.columnconfigure(1, weight=1)
+        dialog.resizable(True, True)
+        self._apply_icon(dialog)
 
         folder_var = tk.StringVar(value=self.content_dir_var.get().strip())
         threads_var = tk.IntVar(value=max(1, int(self.content_threads_var.get() or 1)))
@@ -2106,53 +2504,75 @@ class BFSUWebLensApp(tk.Tk):
             lang,
             self.defaults.get("content_cleaning_scheme", "auto"),
         ) if hasattr(self, "content_cleaning_combo") and self.content_cleaning_combo.get() else self.settings.get("content_cleaning_scheme", "auto")
-        current_label = label_for(next((o for o in CONTENT_CLEANING_OPTIONS if o.get("key") == current_key), CONTENT_CLEANING_OPTIONS[0]), lang)
-        scheme_var.set(current_label)
+        scheme_var.set(label_for(next((o for o in CONTENT_CLEANING_OPTIONS if o.get("key") == current_key), CONTENT_CLEANING_OPTIONS[0]), lang))
 
-        ttk.Label(frm, text=t(lang, "content_folder"), style="Panel.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=4)
-        folder_frame = ttk.Frame(frm)
-        folder_frame.grid(row=0, column=1, sticky="ew", pady=4)
-        folder_frame.columnconfigure(0, weight=1)
-        ttk.Entry(folder_frame, textvariable=folder_var, width=48).grid(row=0, column=0, sticky="ew", padx=(0, 4))
+        root = ctk.CTkFrame(dialog, fg_color=COLOR_BG, corner_radius=0)
+        root.pack(fill="both", expand=True, padx=16, pady=16)
+        body = ctk.CTkScrollableFrame(root, fg_color=COLOR_PANEL, corner_radius=7)
+        body.pack(fill="both", expand=True)
+        section = CTkSection(body, text=t(lang, title_key))
+        section.pack(fill="x", padx=8, pady=8)
+        section.grid_columnconfigure(0, weight=0, minsize=205)
+        section.grid_columnconfigure(1, weight=1)
+        font = ctk.CTkFont(family=FONT_FAMILY, size=12)
+
+        def add_label(row, key):
+            ctk.CTkLabel(section, text=t(lang, key), font=font, anchor="w", justify="left").grid(
+                row=row, column=0, sticky="w", padx=(12, 10), pady=6
+            )
+
+        add_label(1, "content_folder")
+        folder_frame = ctk.CTkFrame(section, fg_color="transparent")
+        folder_frame.grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=6)
+        folder_frame.grid_columnconfigure(0, weight=1)
+        ctk.CTkEntry(folder_frame, textvariable=folder_var, height=32, font=font).grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
         def browse_folder():
             selected = filedialog.askdirectory(title=t(lang, "select_content_folder"), initialdir=folder_var.get() or os.getcwd())
             if selected:
                 folder_var.set(selected)
 
-        ttk.Button(folder_frame, text=t(lang, "browse"), command=browse_folder).grid(row=0, column=1, sticky="e")
+        ctk.CTkButton(folder_frame, text=t(lang, "browse"), command=browse_folder, width=82, height=32, **ctk_button_colors()).grid(row=0, column=1)
 
-        ttk.Label(frm, text=t(lang, "content_threads"), style="Panel.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Spinbox(frm, from_=1, to=32, textvariable=threads_var, width=10).grid(row=1, column=1, sticky="w", pady=4)
+        add_label(2, "content_threads")
+        CTkSpinbox(section, from_=1, to=32, textvariable=threads_var, width=170).grid(row=2, column=1, sticky="w", padx=(0, 12), pady=6)
+        add_label(3, "content_fetch_mode")
+        ctk.CTkComboBox(section, variable=fetch_mode_var, values=fetch_mode_labels, state="readonly", height=32, font=font, dropdown_font=font).grid(row=3, column=1, sticky="ew", padx=(0, 12), pady=6)
+        add_label(4, "content_delay")
+        delay_box = ctk.CTkFrame(section, fg_color="transparent")
+        delay_box.grid(row=4, column=1, sticky="w", padx=(0, 12), pady=6)
+        CTkSpinbox(delay_box, from_=0, to=9999999, textvariable=delay_min_var, width=145).pack(side="left")
+        ctk.CTkLabel(delay_box, text="–", width=26, text_color=COLOR_MUTED).pack(side="left")
+        CTkSpinbox(delay_box, from_=0, to=9999999, textvariable=delay_max_var, width=145).pack(side="left")
+        add_label(5, "content_receive_wait")
+        CTkSpinbox(section, from_=0, to=9999999, textvariable=receive_wait_var, width=170).grid(row=5, column=1, sticky="w", padx=(0, 12), pady=6)
+        add_label(6, "content_retry_count")
+        CTkSpinbox(section, from_=0, to=10, textvariable=retry_var, width=170).grid(row=6, column=1, sticky="w", padx=(0, 12), pady=6)
+        add_label(7, "content_task_timeout")
+        CTkSpinbox(section, from_=30, to=86400, textvariable=task_timeout_var, width=170).grid(row=7, column=1, sticky="w", padx=(0, 12), pady=6)
+        ctk.CTkCheckBox(
+            section,
+            text=t(lang, "content_resume_enabled"),
+            variable=resume_var,
+            height=26,
+            checkbox_width=19,
+            checkbox_height=19,
+            font=font,
+        ).grid(row=8, column=0, columnspan=2, sticky="w", padx=12, pady=7)
+        add_label(9, "content_cleaning_scheme")
+        ctk.CTkComboBox(section, variable=scheme_var, values=scheme_labels, state="readonly", height=32, font=font, dropdown_font=font).grid(row=9, column=1, sticky="ew", padx=(0, 12), pady=6)
 
-        ttk.Label(frm, text=t(lang, "content_fetch_mode"), style="Panel.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=4)
-        fetch_combo = ttk.Combobox(frm, textvariable=fetch_mode_var, values=fetch_mode_labels, state="readonly", width=42)
-        fetch_combo.grid(row=2, column=1, sticky="w", pady=4)
-
-        ttk.Label(frm, text=t(lang, "content_delay"), style="Panel.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=4)
-        delay_box = ttk.Frame(frm)
-        delay_box.grid(row=3, column=1, sticky="w", pady=4)
-        ttk.Spinbox(delay_box, from_=0, to=9999999, textvariable=delay_min_var, width=10).pack(side="left")
-        ttk.Label(delay_box, text=" - ").pack(side="left")
-        ttk.Spinbox(delay_box, from_=0, to=9999999, textvariable=delay_max_var, width=10).pack(side="left")
-
-        ttk.Label(frm, text=t(lang, "content_receive_wait"), style="Panel.TLabel").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Spinbox(frm, from_=0, to=9999999, textvariable=receive_wait_var, width=10).grid(row=4, column=1, sticky="w", pady=4)
-
-        ttk.Label(frm, text=t(lang, "content_retry_count"), style="Panel.TLabel").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Spinbox(frm, from_=0, to=10, textvariable=retry_var, width=10).grid(row=5, column=1, sticky="w", pady=4)
-
-        ttk.Label(frm, text=t(lang, "content_task_timeout"), style="Panel.TLabel").grid(row=6, column=0, sticky="w", padx=(0, 8), pady=4)
-        ttk.Spinbox(frm, from_=30, to=86400, textvariable=task_timeout_var, width=10).grid(row=6, column=1, sticky="w", pady=4)
-
-        ttk.Checkbutton(frm, text=t(lang, "content_resume_enabled"), variable=resume_var).grid(row=7, column=0, columnspan=2, sticky="w", pady=4)
-
-        ttk.Label(frm, text=t(lang, "content_cleaning_scheme"), style="Panel.TLabel").grid(row=8, column=0, sticky="w", padx=(0, 8), pady=4)
-        scheme_combo = ttk.Combobox(frm, textvariable=scheme_var, values=scheme_labels, state="readonly", width=42)
-        scheme_combo.grid(row=8, column=1, sticky="w", pady=4)
-
-        desc = tk.Text(frm, width=72, height=11, wrap="word", relief="flat", borderwidth=0, background=dialog.cget("background"))
-        desc.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        desc = ctk.CTkTextbox(
+            section,
+            height=220,
+            wrap="word",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12),
+            fg_color=COLOR_SURFACE,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            text_color=COLOR_TEXT,
+        )
+        desc.grid(row=10, column=0, columnspan=2, sticky="ew", padx=12, pady=(10, 12))
         desc.insert("1.0", t(lang, "download_mode_help") + "\n\n" + t(lang, "cleaning_scheme_help"))
         desc.configure(state="disabled")
 
@@ -2202,20 +2622,16 @@ class BFSUWebLensApp(tk.Tk):
             result["ok"] = True
             dialog.destroy()
 
-        def cancel():
-            dialog.destroy()
-
-        btns = ttk.Frame(frm)
-        btns.grid(row=10, column=0, columnspan=2, sticky="e", pady=(8, 0))
-        ttk.Button(btns, text="OK", command=ok).grid(row=0, column=0, padx=(0, 6))
-        ttk.Button(btns, text="Cancel", command=cancel).grid(row=0, column=1)
+        btns = ctk.CTkFrame(root, fg_color="transparent")
+        btns.pack(fill="x", pady=(10, 0))
+        ctk.CTkButton(btns, text=t(lang, "cancel"), command=dialog.destroy, width=96, height=32, **ctk_button_colors()).pack(side="right")
+        ctk.CTkButton(btns, text=t(lang, "ok"), command=ok, width=96, height=32, **ctk_button_colors("accent")).pack(side="right", padx=(0, 8))
 
         dialog.bind("<Return>", lambda _e: ok())
-        dialog.bind("<Escape>", lambda _e: cancel())
-        dialog.update_idletasks()
-        x = self.winfo_rootx() + max(20, (self.winfo_width() - dialog.winfo_width()) // 2)
-        y = self.winfo_rooty() + max(20, (self.winfo_height() - dialog.winfo_height()) // 2)
-        dialog.geometry(f"+{x}+{y}")
+        dialog.bind("<Escape>", lambda _e: dialog.destroy())
+        fit_window_to_screen(dialog, requested_width=900, requested_height=790, parent=self, min_width=700, min_height=560)
+        dialog.lift()
+        dialog.focus_force()
         self.wait_window(dialog)
         return bool(result["ok"])
 
@@ -2299,7 +2715,7 @@ class BFSUWebLensApp(tk.Tk):
             return
         self._save_settings()
         self.content_stop_event.clear()
-        self.stop_button.config(state="normal")
+        self.stop_button.configure(state="normal")
         for rec in records:
             setattr(rec, "content_status", t(self.ui_lang, "content_status_queued"))
             setattr(rec, "content_error", "")
@@ -2505,7 +2921,7 @@ class BFSUWebLensApp(tk.Tk):
         self.status_var.set(t(self.ui_lang, "content_download_finished", done=done, total=total))
         self._log(t(self.ui_lang, "content_folder_hint", path=folder))
         if not (self.worker and self.worker.is_alive()):
-            self.stop_button.config(state="disabled")
+            self.stop_button.configure(state="disabled")
 
     def _import_links_file(self):
         self._ensure_active_context_from_tab()
@@ -2576,6 +2992,22 @@ class BFSUWebLensApp(tk.Tk):
         self._log(t(self.ui_lang, "finished_export", n=len(unique), path=path))
         if show_message:
             messagebox.showinfo(APP_NAME, t(self.ui_lang, "finished_export", n=len(unique), path=path))
+
+    def _open_download_folder(self):
+        """Create and open the active panel's configured content-download folder."""
+        self._ensure_active_context_from_tab()
+        raw_path = self.content_dir_var.get().strip() if hasattr(self, "content_dir_var") else ""
+        path = Path(raw_path or self.defaults.get("content_download_dir", str(app_base_dir() / "content_downloads")))
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            if sys.platform.startswith("win"):
+                os.startfile(str(path))
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path)])
+        except Exception as e:
+            messagebox.showerror(APP_NAME, str(e))
 
     def _open_output(self):
         self._ensure_active_context_from_tab()
