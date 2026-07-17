@@ -56,10 +56,16 @@ def remove_emoji(text: str) -> str:
 
 
 def remove_web_code_blocks(text: str) -> str:
+    lowered = text.lower()
+    if not any(marker in lowered for marker in ("<script", "<style", "<noscript", "<template")):
+        return text
     return WEB_CODE_BLOCK_RE.sub("", text)
 
 
 def is_effectively_blank_line(line: str) -> bool:
+    stripped = line.strip()
+    if stripped and not any(marker in line for marker in ("&", "<", "\u00ad", "\u200b", "\u200c", "\u200d", "\ufeff")):
+        return False
     candidate = html.unescape(line)
     candidate = ZERO_WIDTH_RE.sub("", candidate)
     candidate = HTML_COMMENT_RE.sub("", candidate)
@@ -73,6 +79,8 @@ def is_effectively_blank_line(line: str) -> bool:
 
 
 def normalize_spaces(text: str) -> str:
+    if "\u00a0" not in text and "\u202f" not in text and "\t" not in text and "  " not in text:
+        return text
     text = text.replace("\u00a0", " ").replace("\u202f", " ")
     normalized: list[str] = []
     for line in text.split("\n"):
@@ -84,6 +92,8 @@ def normalize_spaces(text: str) -> str:
 
 
 def fix_cjk_spacing(text: str) -> str:
+    if " " not in text and "\t" not in text:
+        return text
     text = re.sub(r"(?<=[\u3400-\u9fff])[ \t]+(?=[\u3400-\u9fff])", "", text)
     text = re.sub(r"(?<=[\u3400-\u9fff])[ \t]+([，。！？；：、）】》〉])", r"\1", text)
     text = re.sub(r"([（【《〈])[ \t]+(?=[\u3400-\u9fff])", r"\1", text)
@@ -195,7 +205,7 @@ def process_lines(
     lines = text.split("\n")
 
     if options.trim_lines:
-        if options.paragraph_indent_mode == "keep":
+        if not options.paragraph_indent_enabled or options.paragraph_indent_mode == "keep":
             updated = [line.rstrip() for line in lines]
         else:
             updated = [line.strip() for line in lines]
@@ -211,7 +221,7 @@ def process_lines(
             changes.append(f"remove_abnormal_symbol_lines:{removed}")
 
     if options.remove_repeated_short_lines:
-        normalized = [re.sub(r"\s+", " ", line).strip() for line in lines]
+        normalized = [" ".join(line.split()) for line in lines]
         counts = Counter(line for line in normalized if 0 < len(line) <= 40)
         seen: set[str] = set()
         filtered: list[str] = []
@@ -252,7 +262,7 @@ def process_lines(
         last: str | None = None
         removed = 0
         for line in lines:
-            key = re.sub(r"\s+", " ", line).strip()
+            key = " ".join(line.split())
             if key and key == last:
                 removed += 1
                 continue
@@ -267,7 +277,7 @@ def process_lines(
         deduped = []
         removed = 0
         for line in lines:
-            key = re.sub(r"\s+", " ", line).strip()
+            key = " ".join(line.split())
             if key and key in seen:
                 removed += 1
                 continue
@@ -365,7 +375,7 @@ def clean_text(
         text = _apply_transform(text, normalize_newlines, "normalize_newlines", changes)
     if options.strip_bom:
         text = _apply_transform(text, strip_bom, "strip_bom", changes)
-    if options.unicode_normalization in {"NFC", "NFKC", "NFD", "NFKD"}:
+    if options.unicode_normalization_enabled and options.unicode_normalization in {"NFC", "NFKC", "NFD", "NFKD"}:
         text = _apply_transform(
             text,
             lambda value: unicodedata.normalize(options.unicode_normalization, value),
@@ -408,18 +418,18 @@ def clean_text(
         text = _apply_transform(text, normalize_spaces, "normalize_spaces", changes)
     if options.fix_cjk_spacing:
         text = _apply_transform(text, fix_cjk_spacing, "fix_cjk_spacing", changes)
-    if options.width_conversion == "full_to_half":
+    if options.width_conversion_enabled and options.width_conversion == "full_to_half":
         text = _apply_transform(text, fullwidth_to_halfwidth, "full_to_half", changes)
-    elif options.width_conversion == "half_to_full":
+    elif options.width_conversion_enabled and options.width_conversion == "half_to_full":
         text = _apply_transform(text, halfwidth_to_fullwidth, "half_to_full", changes)
-    if options.chinese_conversion in {"t2s", "s2t"}:
+    if options.chinese_conversion_enabled and options.chinese_conversion in {"t2s", "s2t"}:
         converted, warning = convert_chinese(text, options.chinese_conversion)
         if warning:
             warnings.append(warning)
         elif converted != text:
             changes.append(options.chinese_conversion)
             text = converted
-    if options.punctuation_mode in {"ascii", "cjk"}:
+    if options.punctuation_mode_enabled and options.punctuation_mode in {"ascii", "cjk"}:
         text = _apply_transform(
             text,
             lambda value: normalize_punctuation(value, options.punctuation_mode),
@@ -443,7 +453,7 @@ def clean_text(
 
     if options.paragraph_reflow:
         text = _apply_transform(text, paragraph_reflow, "paragraph_reflow", changes)
-    if options.paragraph_indent_mode in {"strip", "cjk_2"}:
+    if options.paragraph_indent_enabled and options.paragraph_indent_mode in {"strip", "cjk_2"}:
         text = _apply_transform(
             text,
             lambda value: normalize_paragraph_indents(value, options.paragraph_indent_mode),

@@ -9,7 +9,7 @@ from typing import Any
 
 APP_NAME = "BFSU ClearLens"
 APP_NAME_ZH = "BFSU 文本整理器"
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.5.11"
 SOURCE_ROOT = Path(__file__).resolve().parents[1]
 EXECUTABLE_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else SOURCE_ROOT
 INTERNAL_ROOT = Path(getattr(sys, "_MEIPASS", EXECUTABLE_ROOT))
@@ -60,10 +60,21 @@ def normalize_settings(settings: dict[str, Any]) -> dict[str, Any]:
     if int(processing.get("max_workers", 0) or 0) <= 0:
         processing["max_workers"] = max(1, (os.cpu_count() or 2) // 2)
     settings.setdefault("editor", {}).setdefault("font_size", 11)
+    output = settings.setdefault("output", {})
+    output.setdefault("encoding", "utf-8")
+    if not str(output.get("encoding", "")).strip():
+        output["encoding"] = "utf-8"
+    settings.pop("display", None)
     ai = settings.setdefault("ai", {})
     ai.setdefault("provider", "openai")
     ai.setdefault("openai_model", str(ai.get("model", "gpt-5.4-mini")))
     ai.setdefault("deepseek_model", "deepseek-v4-flash")
+    ai.setdefault("max_chars_per_request", 24000)
+    ai.setdefault("max_output_tokens", 16000)
+    ai.setdefault("chunk_overlap_lines", 2)
+    ai.setdefault("request_timeout_seconds", 180)
+    ai.setdefault("retry_attempts", 2)
+    ai.setdefault("adaptive_chunking", True)
     if not ai.get("openai_api_key") and ai.get("api_key"):
         ai["openai_api_key"] = ai.get("api_key")
     ai.setdefault("openai_api_key", "")

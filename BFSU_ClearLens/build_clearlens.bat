@@ -34,6 +34,8 @@ echo Building minimal complete onedir package...
   --icon "assets\app.ico" ^
   --version-file "assets\version_info.txt" ^
   --collect-all tkinterdnd2 ^
+  --collect-all customtkinter ^
+  --copy-metadata customtkinter ^
   --collect-data ftfy ^
   --collect-data opencc ^
   --collect-submodules openai ^
@@ -65,6 +67,7 @@ if not exist "%DIST_DIR%\BFSU_ClearLens.exe" goto :layout_error
 if not exist "%DIST_DIR%\_internal" goto :layout_error
 if not exist "%DIST_DIR%\assets\app.ico" goto :layout_error
 if not exist "%DIST_DIR%\assets\app.png" goto :layout_error
+if not exist "%DIST_DIR%\assets\clearlens_theme.json" goto :layout_error
 if not exist "%DIST_DIR%\config\default_settings.json" goto :layout_error
 if not exist "%DIST_DIR%\config\regex_rules.json" goto :layout_error
 if not exist "%DIST_DIR%\samples\sample_noisy_text.txt" goto :layout_error

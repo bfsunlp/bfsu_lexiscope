@@ -81,7 +81,8 @@ class TextFile:
 class CleanOptions:
     normalize_newlines: bool = True
     strip_bom: bool = True
-    unicode_normalization: str = "NFC"
+    unicode_normalization_enabled: bool = False
+    unicode_normalization: str = "none"
     fix_mojibake: bool = False
     remove_control_chars: bool = True
     remove_zero_width_chars: bool = True
@@ -95,8 +96,11 @@ class CleanOptions:
     tabs_to_spaces: bool = True
     tab_size: int = 4
     fix_cjk_spacing: bool = True
+    width_conversion_enabled: bool = False
     width_conversion: str = "none"
+    chinese_conversion_enabled: bool = False
     chinese_conversion: str = "none"
+    punctuation_mode_enabled: bool = False
     punctuation_mode: str = "none"
     remove_empty_lines: bool = False
     collapse_blank_lines: bool = True
@@ -108,8 +112,9 @@ class CleanOptions:
     remove_ocr_placeholders: bool = False
     normalize_repeated_punctuation: bool = False
     paragraph_reflow: bool = False
+    paragraph_indent_enabled: bool = False
     paragraph_indent_mode: str = "keep"
-    repair_hyphenated_linebreaks: bool = True
+    repair_hyphenated_linebreaks: bool = False
     ensure_final_newline: bool = False
 
     @classmethod
@@ -175,6 +180,13 @@ class AISuggestion:
     confidence: float = 0.0
     occurrence: int = 1
     status: str = "pending"
+    edit_id: str = ""
+    chunk_id: str = ""
+    source_hash: str = ""
+    start_line: int = 1
+    end_line: int = 1
+    source_start: int | None = None
+    source_end: int | None = None
 
 
 @dataclass

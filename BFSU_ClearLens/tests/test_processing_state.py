@@ -5,7 +5,8 @@ import unittest
 from pathlib import Path
 
 from clearlens.app import ClearLensApp
-from clearlens.models import TextFile
+from clearlens.history import file_identity
+from clearlens.models import CleanOptions, RegexRule, TextFile
 
 
 class ProcessingStateTests(unittest.TestCase):
@@ -63,6 +64,31 @@ class ProcessingStateTests(unittest.TestCase):
             source = inspect.getsource(method)
             for call in forbidden:
                 self.assertNotIn(call, source, f"{method.__name__} writes through {call}")
+
+    def test_preview_baseline_remains_working_text_when_regex_is_enabled(self) -> None:
+        source = "first\n\nsecond"
+        options = CleanOptions(remove_empty_lines=True)
+        rules = [RegexRule(key="never", name="never", pattern=r"DOES_NOT_MATCH", enabled=True)]
+        before, after, _result = ClearLensApp._compute_local_preview(source, options, rules, 0.65, 8)
+
+        self.assertEqual(before, source)
+        self.assertEqual(after, "first\nsecond")
+        self.assertNotEqual(before, after)
+
+    def test_explicit_preview_snapshot_survives_refresh_until_source_changes(self) -> None:
+        item = TextFile(Path("sample.txt"), "source")
+        app = object.__new__(ClearLensApp)
+        app._preview_snapshot_identity = file_identity(item.path)
+        app._preview_snapshot_source = item.active_text
+
+        self.assertTrue(app._preview_snapshot_matches(item))
+
+        item.set_working_text("edited", "manual")
+        self.assertFalse(app._preview_snapshot_matches(item))
+
+        app._clear_preview_snapshot()
+        self.assertIsNone(app._preview_snapshot_identity)
+        self.assertIsNone(app._preview_snapshot_source)
 
 
 if __name__ == "__main__":

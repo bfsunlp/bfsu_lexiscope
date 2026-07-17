@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from clearlens.fileio import read_text_file, write_output_file, write_text_path
+from clearlens.fileio import DETECTION_SAMPLE_BYTES, read_text_file, write_output_file, write_text_path
 
 
 class FileIOTests(unittest.TestCase):
@@ -53,6 +53,17 @@ class FileIOTests(unittest.TestCase):
                     overwrite=True,
                 )
             self.assertEqual(source.read_text(encoding="utf-8"), "中文")
+
+    def test_large_non_utf8_file_is_detected_from_a_bounded_sample(self) -> None:
+        text = "中文文本第二行。\n" * 70000
+        raw = text.encode("gb18030")
+        self.assertGreater(len(raw), DETECTION_SAMPLE_BYTES)
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "large.html"
+            source.write_bytes(raw)
+            item = read_text_file(source)
+        self.assertEqual(item.original_text, text)
+        self.assertIn(item.encoding, {"gb18030", "gbk"})
 
 
 if __name__ == "__main__":

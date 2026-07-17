@@ -16,7 +16,8 @@
     "parallel_enabled": true,
     "use_multiprocessing": true,
     "max_workers": 0,
-    "preview_max_chars": 200000
+    "preview_max_chars": 200000,
+    "compact_markup_preview_chars": 40000
   },
   "editor": {
     "font_size": 11
@@ -24,7 +25,8 @@
   "local_cleaning": {
     "normalize_newlines": true,
     "strip_bom": true,
-    "unicode_normalization": "NFC",
+    "unicode_normalization_enabled": false,
+    "unicode_normalization": "none",
     "fix_mojibake": false,
     "remove_control_chars": true,
     "remove_zero_width_chars": true,
@@ -38,8 +40,11 @@
     "tabs_to_spaces": true,
     "tab_size": 4,
     "fix_cjk_spacing": true,
+    "width_conversion_enabled": false,
     "width_conversion": "none",
+    "chinese_conversion_enabled": false,
     "chinese_conversion": "none",
+    "punctuation_mode_enabled": false,
     "punctuation_mode": "none",
     "remove_empty_lines": false,
     "collapse_blank_lines": true,
@@ -51,8 +56,9 @@
     "remove_ocr_placeholders": false,
     "normalize_repeated_punctuation": false,
     "paragraph_reflow": false,
+    "paragraph_indent_enabled": false,
     "paragraph_indent_mode": "keep",
-    "repair_hyphenated_linebreaks": true,
+    "repair_hyphenated_linebreaks": false,
     "ensure_final_newline": false
   },
   "thresholds": {
@@ -65,11 +71,15 @@
     "openai_model": "gpt-5.4-mini",
     "deepseek_model": "deepseek-v4-flash",
     "reasoning_effort": "low",
-    "max_chars_per_request": 30000,
-    "max_output_tokens": 8000,
+    "max_chars_per_request": 24000,
+    "max_output_tokens": 16000,
+    "chunk_overlap_lines": 2,
     "confirm_before_send": true,
     "remember_api_key": false,
     "openai_api_key": "",
-    "deepseek_api_key": ""
+    "deepseek_api_key": "",
+    "request_timeout_seconds": 180,
+    "retry_attempts": 2,
+    "adaptive_chunking": true
   }
 }

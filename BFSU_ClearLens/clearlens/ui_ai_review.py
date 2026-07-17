@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import difflib
 import tkinter as tk
-from tkinter import messagebox, ttk
+import customtkinter as ctk
+from tkinter import messagebox
 from typing import Callable
 
 from .ai_client import AIClient
 from .i18n import I18n
 from .models import AISuggestion
-from .ui_common import IconToplevel
+from .ui_common import COLOR_MUTED, DpiAwareTreeview, FONT_FAMILY, IconToplevel, button_colors, make_section
+from .ui_text import format_line_numbers, fragment_line_numbers
 
 
 class SuggestionReviewSession:
@@ -21,14 +23,31 @@ class SuggestionReviewSession:
         item = self.suggestions[index]
         if item.status in {"applied", "stale"}:
             return False
+        span = AIClient._locate_suggestion(self.text, item)
         updated, applied = AIClient.apply_suggestion(self.text, item)
         if not applied and self.text.count(item.original_fragment) == 1:
             item.occurrence = 1
+            span = AIClient._locate_suggestion(self.text, item)
             updated, applied = AIClient.apply_suggestion(self.text, item)
         if not applied:
             item.status = "stale"
             return False
         item.status = "applied"
+        if span is not None:
+            start, end = span
+            delta = len(item.replacement_fragment) - (end - start)
+            item.source_start = start
+            item.source_end = start + len(item.replacement_fragment)
+            for other_index, other in enumerate(self.suggestions):
+                if other_index == index or other.status == "applied" or other.source_start is None:
+                    continue
+                if other.source_start >= end:
+                    other.source_start += delta
+                    if other.source_end is not None:
+                        other.source_end += delta
+                elif other.source_end is not None and other.source_end > start:
+                    other.source_start = None
+                    other.source_end = None
         self.text = updated
         self.applied_count += 1
         return True
@@ -70,6 +89,7 @@ class AIReviewDialog(IconToplevel):
         suggestions: list[AISuggestion],
         on_update: Callable[[str], None],
         on_finish: Callable[[str, int], None],
+        on_navigate: Callable[[list[int]], None],
     ) -> None:
         super().__init__(master)
         self.i18n = i18n
@@ -77,6 +97,11 @@ class AIReviewDialog(IconToplevel):
         self.suggestions = self.session.suggestions
         self.on_update = on_update
         self.on_finish = on_finish
+        self.on_navigate = on_navigate
+        self.suggestion_lines = [
+            self._line_numbers(source_text, item, item.original_fragment)
+            for item in suggestions
+        ]
         self.summary = tk.StringVar()
         self.title(i18n.t("ai_review_title"))
         self.geometry("980x650")
@@ -88,49 +113,43 @@ class AIReviewDialog(IconToplevel):
 
     def _build(self) -> None:
         t = self.i18n.t
-        root = ttk.Frame(self, padding=10)
-        root.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(root, text=t("select_suggestion")).pack(anchor=tk.W, pady=(0, 4))
-        ttk.Label(root, textvariable=self.summary, foreground="#4b6972").pack(anchor=tk.W, pady=(0, 8))
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+        ctk.CTkLabel(root, text=t("select_suggestion"), font=ctk.CTkFont(family=FONT_FAMILY, size=14, weight="bold")).pack(anchor=tk.W, pady=(0, 3))
+        ctk.CTkLabel(root, textvariable=self.summary, text_color=COLOR_MUTED).pack(anchor=tk.W, pady=(0, 8))
 
-        columns = ("operation", "original", "replacement", "reason", "status")
-        tree_frame = ttk.Frame(root)
+        columns = ("lines", "operation", "original", "replacement", "reason", "status")
+        tree_frame = ctk.CTkFrame(root, fg_color="transparent")
         tree_frame.pack(fill=tk.X)
-        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=11, selectmode="browse")
-        headings = (t("operation"), t("original_fragment"), t("replacement_fragment"), t("reason"), t("suggestion_status"))
-        widths = (100, 220, 220, 280, 90)
+        self.tree = DpiAwareTreeview(tree_frame, columns=columns, show="headings", height=11, selectmode="browse")
+        headings = (t("line_numbers"), t("operation"), t("original_fragment"), t("replacement_fragment"), t("reason"), t("suggestion_status"))
+        widths = (95, 100, 210, 210, 260, 90)
         for column, heading, width in zip(columns, headings, widths):
             self.tree.heading(column, text=heading)
-            self.tree.column(column, width=width, minwidth=70, anchor=tk.W)
-        ybar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+            self.tree.logical_column(column, width=width, minwidth=70, anchor=tk.W)
+        ybar = ctk.CTkScrollbar(tree_frame, orientation="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=ybar.set)
         self.tree.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ybar.pack(side=tk.RIGHT, fill=tk.Y)
         self.tree.bind("<<TreeviewSelect>>", self._show_selected)
-        self.tree.bind("<Double-1>", lambda _event: self._accept_selected())
-        self.tree.bind("<Return>", lambda _event: self._accept_selected())
+        self.tree.bind("<Double-1>", self._navigate_selected)
+        self.tree.bind("<Return>", self._navigate_selected)
         self.tree.bind("<Delete>", lambda _event: self._reject_selected())
         self._refresh_tree()
 
-        buttons = ttk.Frame(root)
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
         buttons.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
-        ttk.Button(buttons, text=t("close"), command=self._close).pack(side=tk.RIGHT)
-        ttk.Button(buttons, text=t("review_accept"), command=self._accept_selected).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(buttons, text=t("review_reject"), command=self._reject_selected).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(buttons, text=t("review_accept_all"), command=self._accept_all).pack(side=tk.LEFT)
-        ttk.Button(buttons, text=t("review_reject_all"), command=self._reject_all).pack(side=tk.LEFT, padx=(6, 0))
+        ctk.CTkButton(buttons, text=t("close"), command=self._close, width=90, **button_colors()).pack(side=tk.RIGHT)
+        ctk.CTkButton(buttons, text=t("review_accept"), command=self._accept_selected, width=100, **button_colors("accent")).pack(side=tk.RIGHT, padx=(6, 0))
+        ctk.CTkButton(buttons, text=t("review_reject"), command=self._reject_selected, width=100, **button_colors()).pack(side=tk.RIGHT, padx=(6, 0))
+        ctk.CTkButton(buttons, text=t("review_accept_all"), command=self._accept_all, width=110, **button_colors("accent")).pack(side=tk.LEFT)
+        ctk.CTkButton(buttons, text=t("review_reject_all"), command=self._reject_all, width=110, **button_colors()).pack(side=tk.LEFT, padx=(6, 0))
 
-        preview = ttk.LabelFrame(root, text=t("diff"))
+        preview = make_section(root, t("diff"))
         preview.pack(fill=tk.BOTH, expand=True, pady=10)
-        self.diff_text = tk.Text(preview, wrap=tk.NONE, padx=8, pady=8)
-        preview_y = ttk.Scrollbar(preview, orient=tk.VERTICAL, command=self.diff_text.yview)
-        preview_x = ttk.Scrollbar(preview, orient=tk.HORIZONTAL, command=self.diff_text.xview)
-        self.diff_text.configure(yscrollcommand=preview_y.set, xscrollcommand=preview_x.set, state=tk.DISABLED)
-        self.diff_text.grid(row=0, column=0, sticky=tk.NSEW)
-        preview_y.grid(row=0, column=1, sticky=tk.NS)
-        preview_x.grid(row=1, column=0, sticky=tk.EW)
-        preview.rowconfigure(0, weight=1)
-        preview.columnconfigure(0, weight=1)
+        self.diff_text = ctk.CTkTextbox(preview, wrap=tk.NONE, font=ctk.CTkFont(family=FONT_FAMILY, size=13))
+        self.diff_text.configure(state=tk.DISABLED)
+        self.diff_text.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
         if self.tree.get_children():
             self.tree.selection_set("0")
             self.tree.focus("0")
@@ -140,6 +159,12 @@ class AIReviewDialog(IconToplevel):
         selected = self.tree.selection()
         self.tree.delete(*self.tree.get_children())
         for index, item in enumerate(self.suggestions):
+            fragment = item.replacement_fragment if item.status == "applied" else item.original_fragment
+            current_lines = self._line_numbers(self.session.text, item, fragment)
+            if not current_lines and fragment:
+                current_lines = fragment_line_numbers(self.session.text, fragment, 1)
+            if current_lines:
+                self.suggestion_lines[index] = current_lines
             state_key = {
                 "applied": "suggestion_applied",
                 "rejected": "suggestion_rejected",
@@ -150,6 +175,7 @@ class AIReviewDialog(IconToplevel):
                 tk.END,
                 iid=str(index),
                 values=(
+                    format_line_numbers(self.suggestion_lines[index]),
                     self.i18n.t(f"op_{item.operation}"),
                     item.original_fragment.replace("\n", "↵"),
                     item.replacement_fragment.replace("\n", "↵"),
@@ -165,6 +191,17 @@ class AIReviewDialog(IconToplevel):
     def _selected_index(self) -> int | None:
         selection = self.tree.selection()
         return int(selection[0]) if selection else None
+
+    @staticmethod
+    def _line_numbers(text: str, item: AISuggestion, fragment: str) -> list[int]:
+        if item.source_start is not None:
+            start = item.source_start
+            end = start + len(fragment)
+            if start >= 0 and text[start:end] == fragment:
+                first = text.count("\n", 0, start) + 1
+                last = text.count("\n", 0, max(start, end - 1)) + 1
+                return list(range(first, last + 1))
+        return fragment_line_numbers(text, fragment, item.occurrence)
 
     def _show_selected(self, _event=None) -> None:
         index = self._selected_index()
@@ -183,6 +220,21 @@ class AIReviewDialog(IconToplevel):
         self.diff_text.delete("1.0", tk.END)
         self.diff_text.insert("1.0", rendered)
         self.diff_text.configure(state=tk.DISABLED)
+
+    def _navigate_selected(self, _event=None) -> str:
+        index = self._selected_index()
+        if index is None:
+            return "break"
+        item = self.suggestions[index]
+        fragment = item.replacement_fragment if item.status == "applied" else item.original_fragment
+        lines = self._line_numbers(self.session.text, item, fragment)
+        if not lines and fragment:
+            lines = fragment_line_numbers(self.session.text, fragment, 1)
+        if not lines:
+            lines = self.suggestion_lines[index]
+        if lines:
+            self.on_navigate(lines)
+        return "break"
 
     def _accept_selected(self) -> None:
         index = self._selected_index()

@@ -22,6 +22,11 @@ OUTPUT_ENCODINGS = (
     "cp1252", "latin-1", "ascii",
 )
 
+READ_ENCODINGS = OUTPUT_ENCODINGS + (
+    "cp932", "euc_jp", "euc_kr", "big5hkscs", "cp1250", "cp1251",
+    "cp1253", "cp1255", "cp1256", "cp1257", "iso-8859-1", "iso-8859-2",
+)
+
 COMMON_CJK = set(
     "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经"
     "十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形"
@@ -35,6 +40,8 @@ DETECTION_ENCODINGS = {
     "euc_jp", "euc_jis_2004", "cp949", "euc_kr", "cp1252", "cp1250", "cp1251",
     "cp1253", "cp1255", "cp1256", "cp1257", "iso8859_1", "iso8859_2", "latin_1",
 }
+
+DETECTION_SAMPLE_BYTES = 1024 * 1024
 
 
 def _decode_score(text: str) -> float:
@@ -62,7 +69,12 @@ def _decode_bytes(raw: bytes) -> tuple[str, str, float, list[str]]:
     except UnicodeDecodeError:
         pass
 
-    matches = list(from_bytes(raw))
+    # Charset detection and candidate scoring become disproportionately costly
+    # when they repeatedly decode a complete multi-megabyte non-UTF-8 file.
+    # A representative prefix is enough to rank candidates; the selected
+    # encoding is still validated by strictly decoding the complete byte stream.
+    sample = raw[:DETECTION_SAMPLE_BYTES]
+    matches = list(from_bytes(sample))
     candidates: list[str] = []
     for match in matches:
         if match.encoding:
@@ -73,11 +85,11 @@ def _decode_bytes(raw: bytes) -> tuple[str, str, float, list[str]]:
         if encoding not in candidates:
             candidates.append(encoding)
 
-    decoded: list[tuple[float, int, str, str]] = []
+    decoded: list[tuple[float, int, str]] = []
     for order, encoding in enumerate(candidates):
         try:
-            text = raw.decode(encoding, errors="strict")
-        except (UnicodeDecodeError, LookupError):
+            sample_text = sample.decode(encoding, errors="ignore")
+        except LookupError:
             continue
         prior = {
             "cp1252": 0.6,
@@ -89,17 +101,22 @@ def _decode_bytes(raw: bytes) -> tuple[str, str, float, list[str]]:
             "cp949": 0.15,
         }.get(encoding, 0.0)
         rank_bonus = max(0.0, 0.5 - order * 0.05)
-        decoded.append((_decode_score(text) + prior + rank_bonus, order, encoding, text))
+        decoded.append((_decode_score(sample_text) + prior + rank_bonus, order, encoding))
     if not decoded:
         return raw.decode("utf-8", errors="replace"), "utf-8", 0.0, ["encoding_detection_failed"]
 
     decoded.sort(key=lambda item: item[0], reverse=True)
-    best_score, _order, encoding, text = decoded[0]
+    best_score = decoded[0][0]
     second_score = decoded[1][0] if len(decoded) > 1 else best_score - 3
     gap = max(0.0, best_score - second_score)
     confidence = min(0.95, 0.35 + min(gap, 4.0) * 0.15)
     warnings = [] if confidence >= 0.6 else ["encoding_detection_low_confidence"]
-    return text, encoding, confidence, warnings
+    for _score, _order, encoding in decoded:
+        try:
+            return raw.decode(encoding, errors="strict"), encoding, confidence, warnings
+        except (UnicodeDecodeError, LookupError):
+            continue
+    return raw.decode("utf-8", errors="replace"), "utf-8", 0.0, ["encoding_detection_failed"]
 
 
 def discover_text_files(paths: Iterable[Path], recursive: bool = True) -> list[Path]:

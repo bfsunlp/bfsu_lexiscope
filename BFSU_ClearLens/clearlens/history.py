@@ -25,6 +25,10 @@ class FileEditState:
     target_encoding: str
     output_suffix_key: str
 
+    @property
+    def text(self) -> str:
+        return zlib.decompress(self.cleaned_text).decode("utf-8")
+
     @classmethod
     def capture(cls, item: TextFile) -> "FileEditState":
         return cls(
@@ -38,7 +42,7 @@ class FileEditState:
         )
 
     def restore(self, item: TextFile) -> None:
-        item.cleaned_text = zlib.decompress(self.cleaned_text).decode("utf-8")
+        item.cleaned_text = self.text
         item.has_working_text = self.has_working_text
         item.status = self.status
         item.output_path = Path(self.output_path) if self.output_path else None
@@ -49,6 +53,7 @@ class FileEditState:
 
 @dataclass(frozen=True)
 class HistoryEntry:
+    entry_id: int
     label: str
     before: dict[str, FileEditState]
     after: dict[str, FileEditState]
@@ -59,6 +64,7 @@ class OperationHistory:
         self.limit = max(1, limit)
         self._undo: deque[HistoryEntry] = deque(maxlen=self.limit)
         self._redo: deque[HistoryEntry] = deque(maxlen=self.limit)
+        self._next_id = 1
 
     @staticmethod
     def capture(files: list[TextFile], indices: list[int]) -> dict[str, FileEditState]:
@@ -73,18 +79,26 @@ class OperationHistory:
         label: str,
         before: dict[str, FileEditState],
         after: dict[str, FileEditState],
-    ) -> bool:
+    ) -> HistoryEntry | None:
         shared = before.keys() & after.keys()
         if not shared or all(before[key] == after[key] for key in shared):
-            return False
+            return None
         entry = HistoryEntry(
+            entry_id=self._next_id,
             label=label,
             before={key: before[key] for key in shared},
             after={key: after[key] for key in shared},
         )
+        self._next_id += 1
         self._undo.append(entry)
         self._redo.clear()
-        return True
+        return entry
+
+    def peek_undo(self) -> HistoryEntry | None:
+        return self._undo[-1] if self._undo else None
+
+    def peek_redo(self) -> HistoryEntry | None:
+        return self._redo[-1] if self._redo else None
 
     def undo(self) -> tuple[HistoryEntry, dict[str, FileEditState]] | None:
         if not self._undo:

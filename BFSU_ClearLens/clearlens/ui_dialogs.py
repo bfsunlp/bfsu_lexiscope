@@ -4,15 +4,76 @@ import copy
 import re
 import tkinter as tk
 import uuid
-from tkinter import messagebox, ttk
-from typing import Callable
+import customtkinter as ctk
+from tkinter import messagebox
+from typing import Callable, Sequence
 
 from .ai_client import AISettings
 from .cleaner import regex_flags
 from .i18n import I18n
 from .models import RegexRule
-from .ui_common import IconToplevel
+from .ui_common import DpiAwareTreeview, FONT_FAMILY, IconToplevel, button_colors
 from .ui_regex_generator import RegexLLMGeneratorDialog
+
+
+class EncodingSelectDialog(IconToplevel):
+    """Scaled CTk encoding chooser used instead of the fixed-size Tk prompt."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        i18n: I18n,
+        encodings: Sequence[str],
+        current: str = "utf-8",
+    ) -> None:
+        super().__init__(master)
+        self.i18n = i18n
+        normalized = current.strip().lower() or "utf-8"
+        self.values = list(dict.fromkeys((normalized, *encodings)))
+        self.encoding_var = tk.StringVar(value=normalized)
+        self.result: str | None = None
+        self.title(i18n.t("reopen_encoding"))
+        self.geometry("560x220")
+        self.minsize(500, 210)
+        self.transient(master)
+        self.grab_set()
+        self._build()
+
+    def _build(self) -> None:
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=18, pady=18)
+        ctk.CTkLabel(
+            root,
+            text=self.i18n.t("source_encoding_prompt"),
+            anchor=tk.W,
+            justify=tk.LEFT,
+            wraplength=510,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+        ).pack(fill=tk.X, pady=(0, 10))
+        combo = ctk.CTkComboBox(
+            root,
+            variable=self.encoding_var,
+            values=self.values,
+            state="readonly",
+            height=34,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+            dropdown_font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+        )
+        combo.pack(fill=tk.X)
+        combo.set(self.encoding_var.get())
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
+        buttons.pack(side=tk.BOTTOM, fill=tk.X, pady=(16, 0))
+        ctk.CTkButton(buttons, text=self.i18n.t("cancel"), command=self.destroy, width=96, **button_colors()).pack(side=tk.RIGHT)
+        ctk.CTkButton(buttons, text=self.i18n.t("reopen"), command=self._accept, width=96, **button_colors("accent")).pack(side=tk.RIGHT, padx=(0, 8))
+        self.bind("<Return>", lambda _event: self._accept())
+        self.bind("<Escape>", lambda _event: self.destroy())
+        combo.focus_set()
+
+    def _accept(self) -> None:
+        value = self.encoding_var.get().strip().lower()
+        if value:
+            self.result = value
+            self.destroy()
 
 
 class RegexLibraryDialog(IconToplevel):
@@ -41,10 +102,10 @@ class RegexLibraryDialog(IconToplevel):
 
     def _build(self) -> None:
         t = self.i18n.t
-        root = ttk.Frame(self, padding=10)
-        root.pack(fill=tk.BOTH, expand=True)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
         columns = ("enabled", "name", "category", "description")
-        self.tree = ttk.Treeview(root, columns=columns, show="headings", selectmode="browse")
+        self.tree = DpiAwareTreeview(root, columns=columns, show="headings", selectmode="browse")
         for column, label, width in (
             ("enabled", t("regex_enabled"), 70),
             ("name", t("regex_name"), 230),
@@ -52,8 +113,8 @@ class RegexLibraryDialog(IconToplevel):
             ("description", t("regex_description"), 430),
         ):
             self.tree.heading(column, text=label)
-            self.tree.column(column, width=width, minwidth=60, anchor=tk.W)
-        ybar = ttk.Scrollbar(root, orient=tk.VERTICAL, command=self.tree.yview)
+            self.tree.logical_column(column, width=width, minwidth=60, anchor=tk.W)
+        ybar = ctk.CTkScrollbar(root, orientation="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=ybar.set)
         self.tree.grid(row=0, column=0, sticky=tk.NSEW)
         ybar.grid(row=0, column=1, sticky=tk.NS)
@@ -62,16 +123,20 @@ class RegexLibraryDialog(IconToplevel):
         root.columnconfigure(0, weight=1)
         self._refresh()
 
-        buttons = ttk.Frame(root)
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
         buttons.grid(row=1, column=0, columnspan=2, sticky=tk.EW, pady=(10, 0))
-        ttk.Button(buttons, text=t("regex_toggle"), command=self._toggle).pack(side=tk.LEFT)
-        ttk.Button(buttons, text=t("regex_add_custom"), command=self._add).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=t("regex_edit"), command=self._edit).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=t("regex_delete"), command=self._delete).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=t("regex_test"), command=self._test).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=t("regex_ai_generate"), command=self._generate_with_llm).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=t("save"), command=self._save).pack(side=tk.RIGHT)
-        ttk.Button(buttons, text=t("cancel"), command=self.destroy).pack(side=tk.RIGHT, padx=6)
+        actions = ctk.CTkFrame(buttons, fg_color="transparent")
+        actions.pack(fill=tk.X)
+        ctk.CTkButton(actions, text=t("regex_toggle"), command=self._toggle, width=86, **button_colors()).pack(side=tk.LEFT)
+        ctk.CTkButton(actions, text=t("regex_add_custom"), command=self._add, width=100, **button_colors()).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(actions, text=t("regex_edit"), command=self._edit, width=86, **button_colors()).pack(side=tk.LEFT)
+        ctk.CTkButton(actions, text=t("regex_delete"), command=self._delete, width=86, **button_colors()).pack(side=tk.LEFT, padx=5)
+        ctk.CTkButton(actions, text=t("regex_test"), command=self._test, width=86, **button_colors()).pack(side=tk.LEFT)
+        ctk.CTkButton(actions, text=t("regex_ai_generate"), command=self._generate_with_llm, width=120, **button_colors("llm")).pack(side=tk.LEFT, padx=5)
+        decisions = ctk.CTkFrame(buttons, fg_color="transparent")
+        decisions.pack(fill=tk.X, pady=(6, 0))
+        ctk.CTkButton(decisions, text=t("save"), command=self._save, width=86, **button_colors("accent")).pack(side=tk.RIGHT)
+        ctk.CTkButton(decisions, text=t("cancel"), command=self.destroy, width=86, **button_colors()).pack(side=tk.RIGHT, padx=6)
 
     def _refresh(self) -> None:
         selection = self.tree.selection()
@@ -161,7 +226,8 @@ class RegexEditDialog(IconToplevel):
         self.original = copy.deepcopy(rule)
         self.result: RegexRule | None = None
         self.title(i18n.t("regex_add_custom") if rule is None else i18n.t("regex_edit"))
-        self.geometry("620x460")
+        self.geometry("700x600")
+        self.minsize(560, 430)
         self.transient(master)
         self.grab_set()
         self.name_var = tk.StringVar(value=rule.name if rule else "")
@@ -170,29 +236,35 @@ class RegexEditDialog(IconToplevel):
 
     def _build(self, rule: RegexRule | None) -> None:
         t = self.i18n.t
-        root = ttk.Frame(self, padding=12)
-        root.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(root, text=t("regex_name")).pack(anchor=tk.W)
-        ttk.Entry(root, textvariable=self.name_var).pack(fill=tk.X, pady=(2, 8))
-        ttk.Label(root, text=t("regex_pattern")).pack(anchor=tk.W)
-        self.pattern = tk.Text(root, height=5, wrap=tk.NONE)
-        self.pattern.pack(fill=tk.BOTH, expand=True, pady=(2, 8))
-        ttk.Label(root, text=t("regex_replacement")).pack(anchor=tk.W)
-        self.replacement = tk.Text(root, height=3, wrap=tk.NONE)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
+        # Reserve the decision row before the scrollable form. At high Windows
+        # scale factors the old expanding pattern editor could consume all
+        # available height and push Save/Cancel outside the visible window.
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
+        buttons.pack(side=tk.BOTTOM, fill=tk.X, pady=(10, 0))
+        ctk.CTkButton(buttons, text=t("save"), command=self._save, width=100, **button_colors("accent")).pack(side=tk.RIGHT)
+        ctk.CTkButton(buttons, text=t("cancel"), command=self.destroy, width=100, **button_colors()).pack(side=tk.RIGHT, padx=8)
+
+        form = ctk.CTkScrollableFrame(root, fg_color="transparent")
+        form.pack(fill=tk.BOTH, expand=True)
+        ctk.CTkLabel(form, text=t("regex_name")).pack(anchor=tk.W)
+        ctk.CTkEntry(form, textvariable=self.name_var).pack(fill=tk.X, pady=(2, 8))
+        ctk.CTkLabel(form, text=t("regex_pattern")).pack(anchor=tk.W)
+        self.pattern = ctk.CTkTextbox(form, height=125, wrap=tk.NONE, font=ctk.CTkFont(family=FONT_FAMILY, size=13))
+        self.pattern.pack(fill=tk.X, pady=(2, 8))
+        ctk.CTkLabel(form, text=t("regex_replacement")).pack(anchor=tk.W)
+        self.replacement = ctk.CTkTextbox(form, height=90, wrap=tk.NONE, font=ctk.CTkFont(family=FONT_FAMILY, size=13))
         self.replacement.pack(fill=tk.X, pady=(2, 8))
-        ttk.Label(root, text=t("regex_flags")).pack(anchor=tk.W)
-        ttk.Entry(root, textvariable=self.flags_var).pack(fill=tk.X, pady=(2, 8))
-        ttk.Label(root, text=t("regex_description")).pack(anchor=tk.W)
-        self.description = ttk.Entry(root)
+        ctk.CTkLabel(form, text=t("regex_flags")).pack(anchor=tk.W)
+        ctk.CTkEntry(form, textvariable=self.flags_var).pack(fill=tk.X, pady=(2, 8))
+        ctk.CTkLabel(form, text=t("regex_description")).pack(anchor=tk.W)
+        self.description = ctk.CTkEntry(form)
         self.description.pack(fill=tk.X, pady=(2, 8))
         if rule:
             self.pattern.insert("1.0", rule.pattern)
             self.replacement.insert("1.0", rule.replacement)
             self.description.insert(0, rule.description)
-        buttons = ttk.Frame(root)
-        buttons.pack(fill=tk.X)
-        ttk.Button(buttons, text=t("save"), command=self._save).pack(side=tk.RIGHT)
-        ttk.Button(buttons, text=t("cancel"), command=self.destroy).pack(side=tk.RIGHT, padx=6)
 
     def _save(self) -> None:
         pattern = self.pattern.get("1.0", tk.END).rstrip("\n")
@@ -225,36 +297,54 @@ class FindReplaceDialog(IconToplevel):
         i18n: I18n,
         get_text: Callable[[], str],
         set_text: Callable[[str], None],
+        highlight_matches: Callable[[list[tuple[int, int]]], None] | None = None,
     ) -> None:
         super().__init__(master)
         self.i18n = i18n
         self.get_text = get_text
         self.set_text = set_text
+        self.highlight_matches = highlight_matches
         self.find_var = tk.StringVar()
         self.replace_var = tk.StringVar()
         self.regex_var = tk.BooleanVar(value=False)
         self.case_var = tk.BooleanVar(value=True)
+        self.result_var = tk.StringVar(value="")
+        self.search_position = 0
         self.title(i18n.t("find_replace"))
-        self.geometry("560x230")
+        self.geometry("650x275")
+        self.minsize(600, 260)
         self.transient(master)
         self._build()
 
     def _build(self) -> None:
         t = self.i18n.t
-        root = ttk.Frame(self, padding=12)
-        root.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(root, text=t("find")).grid(row=0, column=0, sticky=tk.W, padx=6, pady=6)
-        ttk.Entry(root, textvariable=self.find_var).grid(row=0, column=1, sticky=tk.EW, padx=6, pady=6)
-        ttk.Label(root, text=t("replace_with")).grid(row=1, column=0, sticky=tk.W, padx=6, pady=6)
-        ttk.Entry(root, textvariable=self.replace_var).grid(row=1, column=1, sticky=tk.EW, padx=6, pady=6)
-        ttk.Checkbutton(root, text=t("regex_mode"), variable=self.regex_var).grid(row=2, column=0, sticky=tk.W, padx=6, pady=6)
-        ttk.Checkbutton(root, text=t("case_sensitive"), variable=self.case_var).grid(row=2, column=1, sticky=tk.W, padx=6, pady=6)
-        buttons = ttk.Frame(root)
-        buttons.grid(row=3, column=0, columnspan=2, sticky=tk.E, pady=12)
-        ttk.Button(buttons, text=t("replace_next"), command=self._replace_next).pack(side=tk.LEFT, padx=4)
-        ttk.Button(buttons, text=t("replace_all"), command=self._replace_all).pack(side=tk.LEFT, padx=4)
-        ttk.Button(buttons, text=t("close"), command=self.destroy).pack(side=tk.LEFT, padx=4)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
+        ctk.CTkLabel(root, text=t("find")).grid(row=0, column=0, sticky=tk.W, padx=6, pady=6)
+        ctk.CTkEntry(root, textvariable=self.find_var).grid(row=0, column=1, sticky=tk.EW, padx=6, pady=6)
+        ctk.CTkLabel(root, text=t("replace_with")).grid(row=1, column=0, sticky=tk.W, padx=6, pady=6)
+        ctk.CTkEntry(root, textvariable=self.replace_var).grid(row=1, column=1, sticky=tk.EW, padx=6, pady=6)
+        ctk.CTkCheckBox(root, text=t("regex_mode"), variable=self.regex_var).grid(row=2, column=0, sticky=tk.W, padx=6, pady=6)
+        ctk.CTkCheckBox(root, text=t("case_sensitive"), variable=self.case_var).grid(row=2, column=1, sticky=tk.W, padx=6, pady=6)
+        ctk.CTkLabel(root, textvariable=self.result_var, anchor=tk.W, text_color="#587076").grid(
+            row=3, column=0, columnspan=2, sticky=tk.EW, padx=6, pady=(4, 0)
+        )
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
+        buttons.grid(row=4, column=0, columnspan=2, sticky=tk.E, pady=12)
+        ctk.CTkButton(buttons, text=t("find_next"), command=self._find_next, width=90, **button_colors()).pack(side=tk.LEFT, padx=3)
+        ctk.CTkButton(buttons, text=t("find_all"), command=self._find_all, width=90, **button_colors()).pack(side=tk.LEFT, padx=3)
+        ctk.CTkButton(buttons, text=t("replace_next"), command=self._replace_next, width=100, **button_colors()).pack(side=tk.LEFT, padx=3)
+        ctk.CTkButton(buttons, text=t("replace_all"), command=self._replace_all, width=100, **button_colors("accent")).pack(side=tk.LEFT, padx=3)
+        ctk.CTkButton(buttons, text=t("close"), command=self.destroy, width=80, **button_colors()).pack(side=tk.LEFT, padx=3)
         root.columnconfigure(1, weight=1)
+        for variable in (self.find_var, self.regex_var, self.case_var):
+            variable.trace_add("write", self._reset_search)
+        self.bind("<Return>", lambda _event: self._find_next())
+        self.bind("<F3>", lambda _event: self._find_next())
+
+    def _reset_search(self, *_args: object) -> None:
+        self.search_position = 0
+        self.result_var.set("")
 
     def _compile(self) -> re.Pattern[str] | None:
         source = self.find_var.get()
@@ -273,18 +363,78 @@ class FindReplaceDialog(IconToplevel):
         if not regex:
             return
         text = self.get_text()
-        updated, count = regex.subn(self.replace_var.get(), text, count=1)
-        if not count:
+        match = regex.search(text, self.search_position) or (regex.search(text, 0, self.search_position) if self.search_position else None)
+        if match is None:
             messagebox.showinfo(self.i18n.t("find_replace"), self.i18n.t("find_not_found"), parent=self)
             return
+        try:
+            replacement = match.expand(self.replace_var.get()) if self.regex_var.get() else self.replace_var.get()
+        except re.error as exc:
+            messagebox.showerror(self.i18n.t("find_replace"), self.i18n.t("regex_invalid", error=exc), parent=self)
+            return
+        updated = text[:match.start()] + replacement + text[match.end():]
         self.set_text(updated)
+        self.search_position = match.start() + max(1, len(replacement))
+        spans = [(match.start(), match.start() + len(replacement))] if replacement else []
+        if self.highlight_matches is not None:
+            self.highlight_matches(spans)
+        self.result_var.set(self.i18n.t("replace_count_inline", count=1))
 
     def _replace_all(self) -> None:
         regex = self._compile()
         if not regex:
             return
-        updated, count = regex.subn(self.replace_var.get(), self.get_text())
+        try:
+            replacement: str | Callable[[re.Match[str]], str]
+            replacement = self.replace_var.get() if self.regex_var.get() else (lambda _match: self.replace_var.get())
+            updated, count = regex.subn(replacement, self.get_text())
+        except re.error as exc:
+            messagebox.showerror(self.i18n.t("find_replace"), self.i18n.t("regex_invalid", error=exc), parent=self)
+            return
         if not count:
             messagebox.showinfo(self.i18n.t("find_replace"), self.i18n.t("find_not_found"), parent=self)
             return
         self.set_text(updated)
+        self.search_position = 0
+        self.result_var.set(self.i18n.t("replace_count_inline", count=count))
+        messagebox.showinfo(
+            self.i18n.t("find_replace"), self.i18n.t("replace_count_message", count=count), parent=self
+        )
+
+    def _find_next(self) -> None:
+        regex = self._compile()
+        if not regex:
+            return
+        text = self.get_text()
+        match = regex.search(text, self.search_position)
+        wrapped = False
+        if match is None and self.search_position:
+            match = regex.search(text, 0, self.search_position)
+            wrapped = match is not None
+        if match is None:
+            self.result_var.set(self.i18n.t("find_count_inline", count=0))
+            messagebox.showinfo(self.i18n.t("find_replace"), self.i18n.t("find_not_found"), parent=self)
+            return
+        self.search_position = max(match.end(), match.start() + 1)
+        if self.highlight_matches is not None:
+            self.highlight_matches([(match.start(), match.end())])
+        self.result_var.set(self.i18n.t("find_next_result", start=match.start() + 1, wrapped=self.i18n.t("search_wrapped") if wrapped else ""))
+
+    def _find_all(self) -> None:
+        regex = self._compile()
+        if not regex:
+            return
+        count = 0
+        spans: list[tuple[int, int]] = []
+        for match in regex.finditer(self.get_text()):
+            count += 1
+            if len(spans) < 2000:
+                spans.append((match.start(), match.end()))
+        if self.highlight_matches is not None:
+            self.highlight_matches(spans)
+        self.result_var.set(self.i18n.t("find_count_inline", count=count))
+        messagebox.showinfo(
+            self.i18n.t("find_replace"),
+            self.i18n.t("find_count_message", count=count, highlighted=len(spans)),
+            parent=self,
+        )

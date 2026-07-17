@@ -4,12 +4,13 @@ import queue
 import threading
 import tkinter as tk
 import uuid
-from tkinter import messagebox, ttk
+import customtkinter as ctk
+from tkinter import messagebox
 
 from .ai_client import AIClient, AISettings
 from .i18n import I18n
 from .models import RegexRule
-from .ui_common import IconToplevel
+from .ui_common import COLOR_MUTED, FONT_FAMILY, IconToplevel, button_colors
 
 
 class RegexLLMGeneratorDialog(IconToplevel):
@@ -37,31 +38,33 @@ class RegexLLMGeneratorDialog(IconToplevel):
         self._build()
 
     def _build(self) -> None:
-        root = ttk.Frame(self, padding=12)
-        root.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(root, text=self.i18n.t("regex_ai_requirement")).pack(anchor=tk.W)
-        self.requirement = tk.Text(root, height=9, wrap=tk.WORD, padx=6, pady=6)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
+        ctk.CTkLabel(root, text=self.i18n.t("regex_ai_requirement")).pack(anchor=tk.W)
+        self.requirement = ctk.CTkTextbox(root, height=190, wrap=tk.WORD, padx=6, pady=6, font=ctk.CTkFont(family=FONT_FAMILY, size=13))
         self.requirement.pack(fill=tk.BOTH, expand=True, pady=(2, 10))
 
-        ttk.Label(root, text=self.i18n.t("regex_ai_sample_file")).pack(anchor=tk.W)
+        ctk.CTkLabel(root, text=self.i18n.t("regex_ai_sample_file")).pack(anchor=tk.W)
         values = [self.i18n.t("regex_ai_no_sample")] + [label for label, _text in self.samples]
-        ttk.Combobox(root, textvariable=self.source_var, values=values, state="readonly").pack(fill=tk.X, pady=(2, 8))
-        ttk.Label(
+        ctk.CTkComboBox(root, variable=self.source_var, values=values, state="readonly").pack(fill=tk.X, pady=(2, 8))
+        ctk.CTkLabel(
             root,
             text=self.i18n.t("regex_ai_tip"),
-            foreground="#4b6972",
+            text_color=COLOR_MUTED,
             wraplength=650,
+            justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        self.progress = ttk.Progressbar(root, mode="indeterminate")
+        self.progress = ctk.CTkProgressBar(root, mode="indeterminate", height=10)
         self.progress.pack(fill=tk.X, pady=(12, 6))
+        self.progress.set(0)
         self.status = tk.StringVar(value="")
-        ttk.Label(root, textvariable=self.status).pack(anchor=tk.W)
-        buttons = ttk.Frame(root)
+        ctk.CTkLabel(root, textvariable=self.status).pack(anchor=tk.W)
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
         buttons.pack(fill=tk.X, pady=(10, 0))
-        self.generate_button = ttk.Button(buttons, text=self.i18n.t("regex_ai_generate"), command=self._generate)
+        self.generate_button = ctk.CTkButton(buttons, text=self.i18n.t("regex_ai_generate"), command=self._generate, width=120, **button_colors("llm"))
         self.generate_button.pack(side=tk.RIGHT)
-        ttk.Button(buttons, text=self.i18n.t("cancel"), command=self._cancel).pack(side=tk.RIGHT, padx=6)
+        ctk.CTkButton(buttons, text=self.i18n.t("cancel"), command=self._cancel, width=90, **button_colors()).pack(side=tk.RIGHT, padx=6)
 
     def _sample_text(self) -> str:
         selected = self.source_var.get()
@@ -87,7 +90,7 @@ class RegexLLMGeneratorDialog(IconToplevel):
             return
         self.generate_button.configure(state=tk.DISABLED)
         self.status.set(self.i18n.t("regex_ai_generating"))
-        self.progress.start(10)
+        self.progress.start()
         sample = self._sample_text()
 
         def worker() -> None:

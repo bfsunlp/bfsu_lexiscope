@@ -73,6 +73,27 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(item.output_path, Path("out/one_converted.txt"))
         self.assertFalse(item.dirty)
 
+    def test_history_entries_have_stable_ids_and_peek_support(self) -> None:
+        item = TextFile(Path("one.txt"), "source")
+        history = OperationHistory()
+        before = history.capture([item], [0])
+        item.set_working_text("first", "manual")
+        first = history.record("first", before, history.capture([item], [0]))
+        self.assertIsNotNone(first)
+        self.assertEqual(history.peek_undo(), first)
+
+        before_second = history.capture([item], [0])
+        item.set_working_text("second", "manual")
+        second = history.record("second", before_second, history.capture([item], [0]))
+        self.assertIsNotNone(second)
+        assert first is not None and second is not None
+        self.assertGreater(second.entry_id, first.entry_id)
+        self.assertEqual(history.peek_undo(), second)
+
+        undone, _states = history.undo() or self.fail("missing undo")
+        self.assertEqual(undone, second)
+        self.assertEqual(history.peek_redo(), second)
+
 
 if __name__ == "__main__":
     unittest.main()

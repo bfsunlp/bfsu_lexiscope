@@ -3,11 +3,12 @@ from __future__ import annotations
 import copy
 import tkinter as tk
 import uuid
-from tkinter import messagebox, ttk
+import customtkinter as ctk
+from tkinter import messagebox
 
 from .i18n import I18n
 from .models import LLMRule
-from .ui_common import IconToplevel
+from .ui_common import COLOR_MUTED, DpiAwareTreeview, FONT_FAMILY, IconToplevel, button_colors
 
 
 class LLMRuleLibraryDialog(IconToplevel):
@@ -24,18 +25,18 @@ class LLMRuleLibraryDialog(IconToplevel):
         self._build()
 
     def _build(self) -> None:
-        root = ttk.Frame(self, padding=10)
-        root.pack(fill=tk.BOTH, expand=True)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
         columns = ("enabled", "name", "instruction")
-        self.tree = ttk.Treeview(root, columns=columns, show="headings", selectmode="browse")
+        self.tree = DpiAwareTreeview(root, columns=columns, show="headings", selectmode="browse")
         for column, label, width in (
             ("enabled", self.i18n.t("llm_rule_enabled"), 80),
             ("name", self.i18n.t("llm_rule_name"), 210),
             ("instruction", self.i18n.t("llm_rule_instruction"), 500),
         ):
             self.tree.heading(column, text=label)
-            self.tree.column(column, width=width, minwidth=70, anchor=tk.W)
-        ybar = ttk.Scrollbar(root, orient=tk.VERTICAL, command=self.tree.yview)
+            self.tree.logical_column(column, width=width, minwidth=70, anchor=tk.W)
+        ybar = ctk.CTkScrollbar(root, orientation="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=ybar.set)
         self.tree.grid(row=0, column=0, sticky=tk.NSEW)
         ybar.grid(row=0, column=1, sticky=tk.NS)
@@ -43,14 +44,14 @@ class LLMRuleLibraryDialog(IconToplevel):
         root.rowconfigure(0, weight=1)
         root.columnconfigure(0, weight=1)
 
-        buttons = ttk.Frame(root)
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
         buttons.grid(row=1, column=0, columnspan=2, sticky=tk.EW, pady=(10, 0))
-        ttk.Button(buttons, text=self.i18n.t("llm_rule_toggle"), command=self._toggle).pack(side=tk.LEFT)
-        ttk.Button(buttons, text=self.i18n.t("llm_rule_add"), command=self._add).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=self.i18n.t("llm_rule_edit"), command=self._edit).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=self.i18n.t("llm_rule_delete"), command=self._delete).pack(side=tk.LEFT, padx=6)
-        ttk.Button(buttons, text=self.i18n.t("save"), command=self._save).pack(side=tk.RIGHT)
-        ttk.Button(buttons, text=self.i18n.t("cancel"), command=self.destroy).pack(side=tk.RIGHT, padx=6)
+        ctk.CTkButton(buttons, text=self.i18n.t("llm_rule_toggle"), command=self._toggle, width=92, **button_colors()).pack(side=tk.LEFT)
+        ctk.CTkButton(buttons, text=self.i18n.t("llm_rule_add"), command=self._add, width=92, **button_colors()).pack(side=tk.LEFT, padx=6)
+        ctk.CTkButton(buttons, text=self.i18n.t("llm_rule_edit"), command=self._edit, width=92, **button_colors()).pack(side=tk.LEFT)
+        ctk.CTkButton(buttons, text=self.i18n.t("llm_rule_delete"), command=self._delete, width=92, **button_colors()).pack(side=tk.LEFT, padx=6)
+        ctk.CTkButton(buttons, text=self.i18n.t("save"), command=self._save, width=92, **button_colors("accent")).pack(side=tk.RIGHT)
+        ctk.CTkButton(buttons, text=self.i18n.t("cancel"), command=self.destroy, width=92, **button_colors()).pack(side=tk.RIGHT, padx=6)
         self._refresh()
 
     def _refresh(self) -> None:
@@ -121,20 +122,20 @@ class LLMRuleEditDialog(IconToplevel):
         self._build(rule)
 
     def _build(self, rule: LLMRule | None) -> None:
-        root = ttk.Frame(self, padding=12)
-        root.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(root, text=self.i18n.t("llm_rule_name")).pack(anchor=tk.W)
-        ttk.Entry(root, textvariable=self.name_var).pack(fill=tk.X, pady=(2, 10))
-        ttk.Label(root, text=self.i18n.t("llm_rule_instruction")).pack(anchor=tk.W)
-        self.instruction = tk.Text(root, height=12, wrap=tk.WORD, padx=6, pady=6)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=14, pady=14)
+        ctk.CTkLabel(root, text=self.i18n.t("llm_rule_name")).pack(anchor=tk.W)
+        ctk.CTkEntry(root, textvariable=self.name_var).pack(fill=tk.X, pady=(2, 10))
+        ctk.CTkLabel(root, text=self.i18n.t("llm_rule_instruction")).pack(anchor=tk.W)
+        self.instruction = ctk.CTkTextbox(root, height=220, wrap=tk.WORD, padx=6, pady=6, font=ctk.CTkFont(family=FONT_FAMILY, size=13))
         self.instruction.pack(fill=tk.BOTH, expand=True, pady=(2, 8))
         if rule:
             self.instruction.insert("1.0", rule.instruction)
-        ttk.Label(root, text=self.i18n.t("llm_rule_tip"), foreground="#4b6972", wraplength=620).pack(anchor=tk.W)
-        buttons = ttk.Frame(root)
+        ctk.CTkLabel(root, text=self.i18n.t("llm_rule_tip"), text_color=COLOR_MUTED, wraplength=620, justify=tk.LEFT).pack(anchor=tk.W)
+        buttons = ctk.CTkFrame(root, fg_color="transparent")
         buttons.pack(fill=tk.X, pady=(10, 0))
-        ttk.Button(buttons, text=self.i18n.t("save"), command=self._save).pack(side=tk.RIGHT)
-        ttk.Button(buttons, text=self.i18n.t("cancel"), command=self.destroy).pack(side=tk.RIGHT, padx=6)
+        ctk.CTkButton(buttons, text=self.i18n.t("save"), command=self._save, width=92, **button_colors("accent")).pack(side=tk.RIGHT)
+        ctk.CTkButton(buttons, text=self.i18n.t("cancel"), command=self.destroy, width=92, **button_colors()).pack(side=tk.RIGHT, padx=6)
 
     def _save(self) -> None:
         instruction = self.instruction.get("1.0", "end-1c").strip()

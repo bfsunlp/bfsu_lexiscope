@@ -47,9 +47,26 @@ class CleanerTests(unittest.TestCase):
         self.assertTrue(result.warnings[0].startswith("regex_error:bad"))
 
     def test_script_and_punctuation_modes_are_independent(self) -> None:
-        options = CleanOptions(width_conversion="full_to_half", punctuation_mode="cjk")
+        options = CleanOptions(
+            width_conversion_enabled=True,
+            width_conversion="full_to_half",
+            punctuation_mode_enabled=True,
+            punctuation_mode="cjk",
+        )
         cleaned, _result = clean_text("中文，ＡＢＣ。", options)
         self.assertEqual(cleaned, "中文，ABC。")
+
+    def test_paragraph_and_glyph_choices_require_explicit_enable_flags(self) -> None:
+        options = CleanOptions(
+            unicode_normalization="NFKC",
+            width_conversion="full_to_half",
+            punctuation_mode="ascii",
+            paragraph_indent_mode="strip",
+            repair_hyphenated_linebreaks=False,
+        )
+        source = "　ＡＢＣ，\n  段落"
+        cleaned, _result = clean_text(source, options)
+        self.assertEqual(cleaned, source)
 
     def test_remove_emoji_preserves_surrounding_text(self) -> None:
         cleaned, result = clean_text("开始😀文本👍🏽结束", CleanOptions(remove_emoji=True))

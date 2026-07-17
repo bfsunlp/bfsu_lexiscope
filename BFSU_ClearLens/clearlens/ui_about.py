@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+
+import customtkinter as ctk
 
 from .config import APP_NAME, APP_VERSION, resource_path
 from .i18n import I18n
-from .ui_common import IconToplevel
+from .ui_common import COLOR_ACCENT, COLOR_MUTED, FONT_FAMILY, IconToplevel, button_colors
 
 
 class AboutDialog(IconToplevel):
@@ -18,36 +19,40 @@ class AboutDialog(IconToplevel):
         self.minsize(620, 540)
         self.transient(master)
         self.grab_set()
-        self._photo = None
+        self._photo: ctk.CTkImage | None = None
 
-        root = ttk.Frame(self, padding=16)
-        root.pack(fill=tk.BOTH, expand=True)
-        top = ttk.Frame(root)
+        root = ctk.CTkFrame(self, fg_color="transparent")
+        root.pack(fill=tk.BOTH, expand=True, padx=18, pady=18)
+        top = ctk.CTkFrame(root, fg_color="transparent")
         top.pack(fill=tk.X)
         logo_path = Path(resource_path("assets/logo.png"))
         if logo_path.exists():
             try:
-                from PIL import Image, ImageTk
+                from PIL import Image
 
                 image = Image.open(logo_path)
-                image.thumbnail((80, 80))
-                self._photo = ImageTk.PhotoImage(image)
-                ttk.Label(top, image=self._photo).pack(side=tk.LEFT, padx=(0, 12))
-            except Exception:
+                self._photo = ctk.CTkImage(light_image=image, dark_image=image, size=(80, 80))
+                ctk.CTkLabel(top, image=self._photo, text="").pack(side=tk.LEFT, padx=(0, 14))
+            except (OSError, ValueError):
                 pass
-        heading = ttk.Frame(top)
+        heading = ctk.CTkFrame(top, fg_color="transparent")
         heading.pack(side=tk.LEFT, fill=tk.X, expand=True, anchor=tk.W)
-        ttk.Label(heading, text=i18n.t("app_title"), font=("Microsoft YaHei UI", 18, "bold")).pack(anchor=tk.W)
+        ctk.CTkLabel(
+            heading,
+            text=i18n.t("app_title"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=22, weight="bold"),
+            text_color=COLOR_ACCENT,
+        ).pack(anchor=tk.W)
         if i18n.t("app_title") != APP_NAME:
-            ttk.Label(heading, text=APP_NAME, foreground="#4b6972").pack(anchor=tk.W, pady=(2, 0))
+            ctk.CTkLabel(heading, text=APP_NAME, text_color=COLOR_MUTED).pack(anchor=tk.W, pady=(2, 0))
 
-        text_frame = ttk.Frame(root)
-        text_frame.pack(fill=tk.BOTH, expand=True, pady=10)
-        text = tk.Text(text_frame, wrap=tk.WORD, height=22, padx=8, pady=8)
-        scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text.yview)
-        text.configure(yscrollcommand=scrollbar.set)
+        text = ctk.CTkTextbox(
+            root,
+            wrap=tk.WORD,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=13),
+            border_width=1,
+        )
         text.insert("1.0", i18n.t("about_text", version=APP_VERSION))
         text.configure(state=tk.DISABLED)
-        text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        ttk.Button(root, text=i18n.t("about_close"), command=self.destroy).pack(anchor=tk.E)
+        text.pack(fill=tk.BOTH, expand=True, pady=12)
+        ctk.CTkButton(root, text=i18n.t("about_close"), command=self.destroy, width=96, **button_colors()).pack(anchor=tk.E)
