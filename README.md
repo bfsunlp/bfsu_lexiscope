@@ -220,7 +220,7 @@ BFSU_WebLens/
 
 ---
 
-### 1.5 BFSU ClearLens / BFSU 文本整理器
+### 1.5 BFSU ClearLens v1.5.11 / BFSU 文本整理器
 
 **BFSU ClearLens** is a batch text organization, deterministic cleaning, encoding-conversion, and optional LLM-assisted review tool in the BFSU LexiScope framework. It is designed for text produced by OCR, web-content extraction, corpus collection, document conversion, and manual transcription. ClearLens imports text-bearing files and outputs organized text; it does not perform OCR, crawl websites, extract metadata, or split files.
 
@@ -245,26 +245,32 @@ BFSU_WebLens/
 - 支持内置及自定义正则规则库、规则测试，并可让大模型根据自然语言需求提出正则表达式方案；
 - 支持将当前选项、自定义正则和大模型自然语言规则保存为独立 JSON 整理方案，便于重复使用；
 - 支持 OpenAI / ChatGPT 与 DeepSeek。大模型可执行受本机无损校验约束的安全整理，也可提出逐条或批量同意、拒绝的校对建议；
+- v1.5.11 增强长文本和密集修改兼容性：支持更大的模型输出容量、自适应分片、结构校验，以及在输出截断、JSON 不兼容或 `too many edits` 时自动缩小片段并重试；
+- 大模型任务运行时持续显示当前文件、当前片段、等待时长、超时阈值和重试状态，并允许用户随时中止，避免长时间运行时缺少反馈；
+- 自动整理采用文件级事务保护：只有全部片段完整通过本机校验后才写入结果，发生超时、截断或结构不兼容时不会保存半截文本；
 - 规则、大模型、转码和人工编辑始终以上一次处理后的当前文本为输入，所有操作依次叠加；只有撤回、重做或恢复原文会还原状态；
 - 处理结果先保留在内存中。选择输出目录不会自动写出，只有“保存”“另存为”或“全部保存”才生成结果文件；
-- 支持清洗前后对照、差异视图、人工编辑、查找替换、字符统计、整理日志和最近 50 项单文件/多文件撤回重做；
+- 支持稳定的可编辑预览快照、紧凑的清洗前后对照、差异视图、人工编辑、查找替换、字符统计、整理日志和最近 50 项单文件/多文件撤回重做；
+- 软件主窗口及各设置、规则、查找、统计、校对等子窗口统一使用 BFSU ClearLens 主图标；
 - 支持选择独立输出目录、保护源文件、保留原目录结构、合并选中文件和合并全部文件；
+- 用户设置、自定义正则规则和大模型自然语言规则分别保存在 `%APPDATA%\BFSU_ClearLens` 下的 `settings.json`、`regex_rules.json` 和 `llm_rules.json` 中，更新或替换软件目录时通常可继续沿用；
 - API 密钥默认只在当前会话中使用；仅在用户明确启用本机保存时写入本机设置，且不会导出到整理方案。
 
 #### Download / 下载
 
-**File / 文件名：** `BFSU_ClearLens.zip`
+**File / 文件名：** `BFSU_ClearLens_v1.5.11.zip`
 
 **Windows Executable / Windows 可执行版：**
 
-https://pan.baidu.com/s/1Z-H233twN7OT57nKOs_aDQ
+https://pan.baidu.com/s/1DW9fLMpsL9Mn23fyXc5cTg?pwd=g6zx
 
-**Extraction Code / 提取码：** `7h2n`
+**Extraction Code / 提取码：** `g6zx`
 
 #### Notes / 使用提示
 
-- 普通用户下载并解压后，应从完整发布目录运行 `BFSU_ClearLens.exe`，不要只移动 EXE 文件；
+- 当前发布版本为 **v1.5.11**。普通用户下载并解压后，应从完整发布目录运行 `BFSU_ClearLens.exe`，不要只移动 EXE 文件；
 - `assets`、`config`、`samples`、README 和依赖说明与 EXE 位于同级目录，Python 与第三方运行依赖位于 `_internal`；
+- 用户设置和自定义规则默认保存在 `%APPDATA%\BFSU_ClearLens`，升级软件前可直接备份该目录；
 - 建议先选择与源文件目录分开的输出目录，检查规则预览和差异视图后再执行批处理；
 - 转码命令只在内存中登记目标编码并严格校验，仍需使用保存命令才会写出转换后的文件；
 - 大模型功能完全可选。涉及词句或语义的建议应由用户逐条核对，任何远程模型建议都不应视为绝对正确。
