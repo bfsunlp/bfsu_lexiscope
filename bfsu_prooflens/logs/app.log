@@ -1,0 +1,5 @@
+2026-07-17 09:12:12,710 [INFO] bfsu_prooflens: BFSU ProofLens started
+2026-07-20 10:18:09,553 [INFO] bfsu_prooflens: BFSU ProofLens started
+2026-07-20 10:49:05,088 [INFO] bfsu_prooflens: BFSU ProofLens started
+2026-07-20 10:58:32,790 [INFO] bfsu_prooflens: BFSU ProofLens started
+2026-07-20 11:00:12,582 [INFO] bfsu_prooflens: Batch OCR completed: {'operation': 'easyocr', 'total': 1, 'completed': 1, 'failed': 0, 'errors': [], 'elapsed_seconds': 68.4653324999963, 'workers': 1, 'backend': 'thread', 'engine': 'easyocr'}

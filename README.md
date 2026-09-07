@@ -6,7 +6,7 @@
 
 当前已发布的核心工具包括： 
  
-- **BFSU MetaTools / 语言学语料库元信息制作工具**
+- **BFSU MetadataLens / 元信息规范设计与管理工具**
 - **BFSU ProofLens / OCR 识别与校对工具**
 - **BFSU AlignLens / 多语翻译对齐工具**
 - **BFSU WebLens / 网络语料检索与网页下载工具**
@@ -42,38 +42,56 @@ BFSU LexiScope 致力于为语言学、翻译学和语料库研究提供一套�
 
 ## 1. Current Tools / 当前工具
 
-### 1.1 BFSU MetaTools / 语言学语料库元信息制作工具
+### 1.1 BFSU MetadataLens v3.5.5 / 元信息规范设计与管理工具
 
-**BFSU MetaTools** is a metadata editing and management tool for linguistic corpora. It supports project creation, metadata schema management, record editing, Excel/XML import, XML-based unified storage, multi-format export, and optional LLM-assisted metadata extraction.
+**BFSU MetadataLens** is a metadata schema design, entry, batch-processing, import/export and LLM-assisted metadata management tool for linguistic research, corpus construction, language-resource databases, and corpus-based translation studies. It separates **metadata schema design** from **metadata record entry**, allowing researchers to define reusable metadata specifications first and then create, review, import, edit, validate and export records under a controlled schema.
 
-**BFSU MetaTools / 语言学语料库元信息制作工具** 面向语言学研究者、语料库建设者和翻译研究者，主要用于创建、编辑、导入、导出和管理语料库元信息。其核心工作流为：
+**BFSU MetadataLens / 元信息规范设计与管理工具** 面向语言学研究、语料库建设、语言资源数据库建设和语料库翻译学研究，用于元信息规范设计、条目录入、批量整理、导入导出、校验以及大模型辅助元信息识别。软件将 **“元信息规范设计”** 与 **“元信息条目录入”** 明确分开，使研究者能够先建立统一、可复用、可校验的元信息 Schema，再在规范约束下录入、导入、复核和管理具体记录。其核心工作流为：
 
 ```text
-项目文件管理 → 元信息规范 Schema 管理 → 元信息记录 Records 编辑
-→ Excel/XML 导入 → XML 统一保存与导出
+项目创建 → 选择或设计元信息规范 → 条目录入 / Excel/XML 导入
+→ 批量字段整理 → 大模型辅助识别与人工复核
+→ Schema / Records 校验 → XML 统一保存 → Excel / CSV / XML 导出
 ```
 
 #### Main Features / 主要功能
 
-- 支持单语、双语平行、多语平行、一本多译、可比语料、学习者语料、口语语料等场景；
-- 支持自定义元信息 Schema；
+- 支持单语、双语平行、多语平行、一本多译、可比语料、学习者语料和口语语料等系统模板；
+- 系统模板与用户模板分开管理，系统模板只读，用户可以导入模板规范、重新设计并自行命名 Schema；
+- 支持 Field ID、XML Tag、数据类型、元信息层级、必填、可重复、受控词表、正则校验、示例及中英文说明等字段属性；
+- 条目录入界面根据当前 Schema 自动生成，支持保存状态提示、记录校验、上一条/下一条和人工编辑；
+- 支持记录总表搜索、排序、多选、复制、删除和批量字段修改；
 - 支持 Excel 元信息导入、字段映射和预览；
-- 支持 XML 元信息导入与标签映射；
-- 支持记录 XML、Schema XML、CSV、Excel 等格式导出；
-- 支持中英文界面切换；
-- 支持大模型辅助识别标题、作者、年份、语种、文类等元信息；
-- 支持大模型辅助生成或扩展 Schema；
-- API Key 仅保存在本地用户设置文件中，不写入项目 XML。
+- 支持 XML 项目、Records XML 和一般 XML 文档导入及标签映射；
+- 支持 Records XML、Schema XML、Excel 和 CSV 导出；
+- 支持 OpenAI、DeepSeek、Qwen、Claude 和 Gemini；
+- 支持单条大模型元信息识别，以及从多个本地文件或文本中的 URL 列表批量识别**新增元信息记录**；
+- 大模型结果先进入人工复核流程，用户可逐字段确认、逐记录应用或一键应用全部确认结果；
+- 大模型识别严格参考当前项目、当前 Schema 和当前记录信息，不允许模型任意创建当前 Schema 之外的字段；
+- API Key 只保存在当前系统用户的本地配置目录，不写入项目 XML，也不会随软件发布目录复制；
+- 项目统一保存为 UTF-8 XML，并支持覆盖前自动备份；
+- 中英文界面、用户手册和 About 随当前界面语言切换。
 
 #### Download / 下载
 
-**File / 文件名：** `bfsu_linguistic_meta_tool.zip`
+**Current Release / 当前版本：** `BFSU MetadataLens v3.5.5`
 
-**Download Link / 下载链接：**
+**File / 文件名：** `BFSU_MetadataLens v3.5.5.zip`
 
-https://pan.baidu.com/s/1PO5hpRC0RogPcWPALNEjQw
+**Direct Download / 直接下载：**  
+https://icloud.bfsu.edu.cn/seafhttp/f/0a5706e5f2b74eb1af69/?op=view
 
-**Extraction Code / 提取码：** `9kst`
+**Baidu Netdisk / 百度网盘：**  
+https://pan.baidu.com/s/1GeVCqrM6Hi1UgILYgkdNhQ?pwd=5pty
+
+**Extraction Code / 提取码：** `5pty`
+
+#### Notes / 使用提示
+
+- 请下载完整 ZIP 压缩包并完整解压后运行，不要只单独移动 EXE 文件；
+- 用户模板和 API Key 保存在当前系统用户配置目录中，与软件发布目录分离；
+- 大模型功能为可选功能，远程识别结果应在写入项目之前由用户人工检查确认；
+- 具体使用方法、Schema 字段说明、批量识别流程和项目 XML 结构请参阅 MetadataLens 目录中的独立 README。
 
 ---
 
@@ -223,7 +241,7 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 - 断点续传仅用于正文下载，不用于搜索结果采集，避免软件在用户不知情的情况下继续访问搜索引擎；
 - 多语种正文抽取采用分层降级策略，包括原始字节保存、编码自动检测、乱码修复、`newspaper3k`、站点模板、`article/main/content` 候选区、可见文本抽取和 clean TXT 输出；
 - 对中文新闻网页和常见 mojibake 乱码进行了增强兼容；
-- 下载结果可保存正文文本、原始页面、下载状态和对应 metadata，便于后续导入 BFSU ClearLens、MetaTools 或其它语料库处理流程。
+- 下载结果可保存正文文本、原始页面、下载状态和对应 metadata，便于后续导入 BFSU ClearLens、BFSU MetadataLens 或其它语料库处理流程。
 
 #### Packaging / 打包结构
 
@@ -390,7 +408,7 @@ A typical BFSU LexiScope workflow may look like this:
 4. Inspect the cumulative working result, then explicitly save the cleaned files and cleaning logs.
 5. Use BFSU AlignLens to segment and align multilingual or translated texts.
 6. Export aligned files as Excel, TMX, XML, JSON, or line-aligned TXT files.
-7. Use BFSU MetaTools to create metadata schemas and records.
+7. Use BFSU MetadataLens to design metadata schemas, create records, and manage corpus metadata.
 8. Link web texts, OCR texts, cleaned texts, or aligned files with metadata records.
 9. Use future LexiScope modules for annotation, retrieval, statistics, and visualization.
 ```
@@ -404,7 +422,7 @@ A typical BFSU LexiScope workflow may look like this:
 4. 检查依次叠加的当前工作结果，再显式保存整理后的文件和整理日志；
 5. 使用 BFSU AlignLens 对多语文本、翻译文本或一本多译文本进行分段、分句和对齐；
 6. 将对齐结果导出为 Excel、TMX、XML、JSON 或按语种行号对齐的 TXT 文件；
-7. 使用 BFSU MetaTools 建立语料库元信息规范和记录；
+7. 使用 BFSU MetadataLens 设计语料库元信息规范、建立记录并统一管理语料库元信息；
 8. 将网页文本、OCR 文本、整理后文本或对齐文件与元信息记录关联；
 9. 后续使用 LexiScope 系列工具完成标注、检索、统计和可视化分析。
 ```
