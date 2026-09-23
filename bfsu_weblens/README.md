@@ -1,493 +1,389 @@
-# BFSU WebLens v1.2.8
+# BFSU WebLens 3.1.4
 
-**BFSU WebLens** is a desktop component of the **BFSU LexiScope** toolkit. It is designed for corpus researchers who need low-frequency, auditable search-result discovery, URL collection, source-page downloading, and multilingual text cleaning.
+## v3.1.4 Windows build-runtime fix / Windows 打包运行时修复
 
-Author and project lead: **Dr. Liu Dingjia / 刘鼎甲 博士, Beijing Foreign Studies University**. Email: **djliu@bfsu.edu.cn**. ChatGPT assisted with requirement analysis, prototyping, code generation, refactoring, testing strategy, documentation drafting, and debugging suggestions. The software concept, corpus workflow, naming, parameter strategy, and final use decisions are directed by Liu Dingjia.
+Version 3.1.4 keeps all v3.0/v3.1 runtime features and fixes Windows build isolation after a real PyCharm/Conda build log showed that the private minimal build prefix was still re-adding the outer activated `bfsu_lexiscope` Conda environment to Qt DLL resolution. The Windows builder may be launched from an activated Conda terminal, but after `.venv_build_windows` is created all runtime probes, PyInstaller processes and smoke tests use only the private build prefix plus Windows system directories. The outer `CONDA_*`, `VIRTUAL_ENV`, `QT_*`, `PYTHON*`, and `BFSU_WEBLENS_BASE_PREFIX` values are removed from child processes. The slim builder continues to use `PySide6-Essentials` and a private Python 3.12 Conda prefix or isolated standard venv, without `--system-site-packages`.
 
-## Download
+3.1.4 保留 3.0/3.1 的全部运行功能，并根据真实 PyCharm/Conda 打包日志修复 Windows 构建隔离问题。此前虽然已经创建了最小私有构建环境，但 Qt DLL 探测逻辑又把外层已激活的 `bfsu_lexiscope` Conda 环境加入 DLL 搜索路径，导致两套 `Qt6Core.dll` 同时参与加载。新版允许用户继续在已经激活 Conda 的 PyCharm Terminal 中直接运行 `build_exe.bat`，但 `.venv_build_windows` 创建完成后，后续运行时检查、PyInstaller 和冻结程序测试只使用私有构建环境及 Windows 系统目录，并从子进程中清除外层 `CONDA_*`、`VIRTUAL_ENV`、`QT_*`、`PYTHON*` 和 `BFSU_WEBLENS_BASE_PREFIX`。Slim Build 继续使用 `PySide6-Essentials` 和独立的 Python 3.12 Conda prefix/标准 venv，不再使用 `--system-site-packages`。
 
-The packaged Windows release can be downloaded from Baidu Netdisk:
+## v3.1.0 Cross-platform release / Windows 与 macOS 跨平台发布
 
-- **Shared file:** `BFSU_WebLens_v1.2.8.zip`
-- **Download link:** https://pan.baidu.com/s/1UXTRIJpFbXJnMCHMTxbWPA?pwd=kvst
-- **Extraction code:** `kvst`
+BFSU WebLens 3.1.0 keeps the v3.0 Manual Collection workflow and adds a reviewed Windows/macOS runtime and release-build system. Windows remains a portable ONEDIR application; frozen macOS builds store writable settings, downloaded browsers/drivers, output and content under `~/Library/Application Support/BFSU WebLens`, rather than modifying the signed `.app` bundle. Chrome for Testing and ChromeDriver selection now follows the running macOS architecture (`arm64` or `x86_64`), while installed Chrome/Edge discovery supports `/Applications` and `~/Applications`.
 
-The download contains the packaged BFSU WebLens v1.2.8 release. After downloading, extract the complete archive and keep the executable together with its accompanying folders and files.
+BFSU WebLens 3.1.0 保留 v3.0 的手动采集流程，并系统审查了 Windows/macOS 运行路径和发布构建逻辑。Windows 继续采用便携式 ONEDIR；macOS 冻结应用将可写设置、下载的浏览器/Driver、输出文件和正文数据存放到 `~/Library/Application Support/BFSU WebLens`，不修改签名后的 `.app`。Chrome for Testing 与 ChromeDriver 会按当前 Mac 架构自动选择 `arm64` 或 `x86_64` 版本，系统浏览器检测同时支持 `/Applications` 与 `~/Applications`。
 
-## 1. Design principles
+## v3.0.0 Manual Collection / 手动采集
 
-WebLens is not a high-frequency scraper. It is intended as a conservative research assistant for building traceable URL lists and downloading already collected pages for later corpus processing.
+BFSU WebLens 3.0 adds a browser-independent manual search-result collection workflow alongside the existing Selenium automatic collector. The user first enters the normal Google/Baidu query parameters in WebLens, then chooses **Manual collection**. WebLens generates one or more initial search URLs using exactly the same query, site, date, language/region and Baidu sequential-term logic as automatic collection.
 
-The software follows five principles:
+The user opens those URLs in any normal browser, handles verification and pagination manually, and saves each search-result page as `.html` or `.htm` (HTML-only is sufficient). The saved files can then be batch-imported from the Manual collection window. WebLens recovers the original saved-page URL when available, detects Google/Baidu result structure, extracts result title/link/source/time/snippet metadata, deduplicates links against the existing Result Preview and appends only new records. Imported manual results immediately use the same review, export and full-text download pipeline as automatically collected results.
 
-1. **Separated engines**: Google and Baidu are separate panels with separate settings, logs, previews, exports, and download actions.
-2. **Auditability**: generated search URLs, query expressions, date windows, site limits, engine metadata, and source metadata are exported whenever possible.
-3. **Conservative access**: default delays are intentionally long, and users can increase them for unstable networks or restrictive sites.
-4. **Multilingual downloading**: content extraction does not rely on one package only; it uses encoding repair, newspaper3k, site templates, article/main/content candidates, visible text fallback, and clean TXT output.
-5. **Limited checkpointing**: search-result crawling is deliberately not resumed after forced closure. Breakpoint continuation applies only to content downloading after URLs have already been crawled or imported.
+Key points:
+
+- Manual collection does **not** require Selenium, ChromeDriver or EdgeDriver.
+- Automatic collection remains available and unchanged.
+- Baidu multiple-term mode generates one initial URL per term; it does not use OR.
+- Enabled date slicing can generate multiple initial URLs; `0` still means no slicing.
+- The user controls pagination manually; WebLens does not calculate page offsets.
+- Multiple saved HTML files can be selected at once, or all top-level `.html/.htm` pages in a folder can be imported.
+- The same HTML files can be imported in multiple rounds; duplicate result URLs are skipped.
+- Browser “Webpage, complete” companion resource folders are not recursively parsed, preventing iframe/resource HTML files from being mistaken for result pages.
+- Search parameters remain editable even if the automatic browser environment is not configured; only **Start collection** is locked in that case.
+
+### 手动采集工作流
+
+WebLens 3.0 在原有 Selenium 自动采集之外增加“手动采集”模式。用户仍然在 Google 或百度面板中填写检索词、站点限定、日期、语种、国家/地区等参数，然后点击 **手动采集**。软件按照与自动采集完全一致的检索逻辑生成一个或多个搜索引擎初始链接。
+
+用户把这些链接复制到自己的日常浏览器中打开，自行完成人机验证和翻页，并将每一页搜索结果保存为 HTML 文件。随后可在“手动采集”窗口中一次性选择多个 `.html/.htm` 文件，或者选择一个包含这些页面的文件夹。WebLens 自动识别 Google/百度结果页，解析标题、链接、来源、时间和摘要等信息，与当前结果预览中的 URL 去重后追加新记录。之后即可直接使用原有的结果整理、导出和正文自动下载功能。
+
+该模式不依赖 Selenium 或 WebDriver，特别适合搜索引擎频繁出现人工验证、用户希望完全控制翻页节奏或需要利用自己的正常浏览器会话完成检索的场景。
+
+## v2.5.3 backend-specific browser policy and Browser & Selenium layout fix
+
+Browser selection now follows the distribution model of each browser instead of forcing one source policy onto both backends.
+
+- **Chrome** defaults to **WebLens portable Chrome (Recommended)**. WebLens uses Chrome for Testing under `tools/browser`, can download it automatically, and pairs it with a matching ChromeDriver. System-installed Chrome remains an explicit **Not recommended** fallback.
+- **Microsoft Edge** defaults to **System-installed Microsoft Edge (Recommended)**. Microsoft does not publish an official portable Edge ZIP comparable to Chrome for Testing, so WebLens detects the system Edge installation and prepares a matching EdgeDriver instead of asking for a portable Edge copy.
+- **One-click configure Chrome & Edge** now always follows the recommended mixed policy: portable Chrome + system Edge.
+- The Edge Browser source selector is fixed to the recommended system source; the independent browser button becomes **Detect system Edge**. Manual Edge executable selection remains available and is version-checked.
+- Collection preflight still re-reads the actual Browser and WebDriver versions before every crawl.
+- The Browser & Selenium dialog status/progress area has been moved out of the form grid. Long status messages now wrap in their own panel and can no longer overlap Page render wait or other controls at high Windows DPI scaling.
 
 
+## v2.5.2 portable browser / WebDriver update
 
-### v1.2.8 window-position fix
-- The main window is fitted to the Windows usable work area only once during startup. The background event-queue poller no longer re-centers the window, so users can freely drag it to any position.
-- Window clamping now distinguishes CustomTkinter logical dimensions from physical monitor pixels and uses the Windows monitor work area, excluding the taskbar. This prevents the right and bottom edges from opening outside the visible desktop at high DPI.
+The application-wide **Browser & Selenium** dialog now provides **Update selected portable browser & WebDriver** in addition to one-click configuration. In the recommended portable-browser mode, the update action checks the vendor's current stable metadata before changing the WebLens-managed environment.
 
-### v1.2.8 interface refinements
-- Google **Results per page** now defaults to **10** and is also recorded in `config/default_settings.json`. Existing installations that still contain the previous shipped default of 50 are migrated to 10.
-- The initial settings pane is wider, while the engine tabs are compact and aligned to the upper-left.
-- The top action bar includes **Open downloads**, which creates and opens the active panel's content download folder.
-- Result Preview actions are divided into bordered Records, Sort, Sampling, and Content download groups so every button remains visible and its purpose is clear.
+- Chrome: WebLens downloads the current official Chrome for Testing Stable ZIP into a new version directory under `tools/browser`, then downloads ChromeDriver for that exact browser version. The old portable browser is retained as a fallback; WebLens switches to the new version only after the browser and Driver have both been prepared and validated.
+- Edge: a bundled portable Edge under `tools/browser` remains supported. WebLens can update EdgeDriver to the newest release compatible with that bundled Edge build. Microsoft does not publish an official portable Edge ZIP equivalent to Chrome for Testing, so WebLens does not silently replace a bundled Edge browser with an installer package. If the bundled Edge is older than current Stable, the dialog reports that limitation explicitly.
+- System-installed browsers remain an explicit **Not recommended** opt-in and are not modified by this update command.
+- When several WebLens portable Chrome versions coexist, WebLens now prefers the newest detected version rather than relying on folder/path ordering.
 
-## 2. What changed in v1.2.8
+## v2.5.1 portable-browser-first policy
 
-- The **traditional WebLens layout and traditional native menu bar are retained**. The search-engine tabs, left settings column, right result preview, log area, and existing collection workflow remain in their established positions.
-- Visual controls now **prefer CustomTkinter throughout**: frames, section cards, buttons, entries, comboboxes, checkboxes, text areas, progress bars, tab controls, draggable split panes, date controls, and application dialogs. Native Tk/ttk is retained only where CTk has no direct equivalent, chiefly the menu system, result Treeview, and multi-select Listbox.
-- Spacing, control heights, typography, surface colors, borders, corner radii, and toolbar rhythm now follow the **BFSU ClearLens / LexiScope** visual system more closely, with less crowded labels and inputs.
-- The left settings column uses a CTk scrollable frame. The wheel scrolls the complete settings column whenever the pointer is inside it, including over query/domain text boxes and language/country multi-select lists.
-- Windows 11 per-monitor DPI awareness is enabled before the GUI is created. Native menu and Treeview metrics are DPI-aware, and the main window plus every application dialog is clamped and centered within the usable screen area so it does not open partially off-screen.
-- The WebLens icon has been redrawn to match ClearLens: **navy background, teal magnifying lens, white web globe, and BFSU identity**. Dedicated small-size PNGs and a multi-resolution 16–256 px ICO improve taskbar and title-bar clarity.
-- The About, guide, settings, download-settings, and date-picker windows use the same CTk styling and apply the product icon consistently.
-- Author information remains explicit: **Dr. Liu Dingjia / 刘鼎甲 博士**, **djliu@bfsu.edu.cn**.
-- `requirements.txt` explicitly includes `customtkinter` and `pillow`; `build_exe.bat` continues to collect CustomTkinter and the complete assets directory.
+Browser collection is now isolated from the user's everyday browser by default. The application-wide **Browser & Selenium** setting has an explicit **Browser source** option:
 
-## 2. What changed in v1.2.4
+- **WebLens portable browser (Recommended)** — the default. WebLens only uses browser executables under `tools/browser`. If portable Chrome is missing, One-click configuration downloads the official Chrome for Testing archive, extracts it into the WebLens `tools/browser` tree, detects its exact version, and then prepares a matching ChromeDriver. Existing system Chrome installations are ignored in this mode.
+- **System-installed browser (Not recommended)** — an explicit opt-in fallback. When selected, WebLens can use Chrome/Edge already installed by the operating system. This mode is not recommended because normal browser auto-updates can independently change the browser version and require a new matching WebDriver.
 
-- The **Site/domain filters** field in both Google and Baidu panels is now a **multi-line input box**.
-- Users can enter one domain or suffix per line, such as:
+Existing portable Edge copies under `tools/browser` are detected and preferred in portable mode. Microsoft does not publish an official Edge portable ZIP equivalent to Chrome for Testing, so WebLens does not silently substitute or modify a user's installed Edge. If no portable Edge is bundled, users can explicitly choose the not-recommended system-browser mode or manually supply a portable Edge executable.
 
-```text
-people.com.cn
-xinhuanet.com
-.gov.cn
-.edu.cn
-site:thepaper.cn
+Legacy settings are migrated safely: a system-browser path saved by an older WebLens release is ignored while the new default portable source is active. It becomes eligible only after the user explicitly selects the system-installed-browser option.
+
+## v2.5.1 pasted-link intake and closed-loop browser/WebDriver setup
+
+- Added **Paste links from text**. Paste arbitrary prose, HTML, Markdown or mixed text containing HTTP/HTTPS URLs; WebLens extracts unique links and appends them to the current Result Preview without replacing existing records. The dialog supports repeated paste/add operations.
+- Fixed the browser-manager `NameError` caused by the missing `_browser_path_family_hint()` helper. Browser paths are now family-checked before configuration.
+- Added **One-click configure Chrome & Edge** above the independent browser/Driver controls. In the default portable-browser mode, WebLens ignores system browser installations, reuses browser copies already under `tools/browser`, and downloads Chrome for Testing when portable Chrome is absent. Portable Edge under `tools/browser` is reused automatically; because Microsoft does not provide an equivalent official portable Edge ZIP, missing portable Edge is reported without modifying the user's installed Edge. Users can explicitly switch to the not-recommended system-browser source if needed.
+- WebDriver downloads now stream with visible progress for resolution, download, extraction and version-compatibility validation.
+- Manual Browser and WebDriver selection is validated immediately. A wrong browser family, unreadable version or browser/Driver build mismatch is rejected before it can be saved; collection preflight still re-checks compatibility before every crawl.
+
+
+## v2.4.5 portable-browser discovery and collection preflight
+
+- Browser discovery now prefers a system-installed Chrome/Edge, then automatically detects portable browser executables already bundled anywhere under the WebLens `tools` folder.
+- When Chrome is absent, **Download recommended browser** can download the official Chrome for Testing ZIP, show configuration progress, extract it under `tools/browser`, and select the extracted executable automatically.
+- Microsoft does not currently publish an equivalent official portable Edge ZIP. A portable Edge already placed under `tools` is still detected and configured automatically; otherwise WebLens opens Microsoft's official Edge download page.
+- WebDriver management itself is unchanged. Before every crawl, however, WebLens re-reads the selected browser version and verifies the configured/cached Driver against it. A stale Driver saved for another browser version cannot be used to start collection.
+- Google and Baidu now both default to **Date-slice step = 0**, meaning an enabled date range is sent as one unsliced search range unless the user explicitly chooses a positive slice size.
+
+
+## v2.4.4 interface-density and high-DPI fixes
+
+- Browser & Selenium settings now sizes itself to its actual controls instead of using a large fixed height, so rows stay compact at high DPI.
+- Combo boxes, date edits and spin boxes now use explicit WebLens chevron icons, restoring clear drop-down/up/down indicators under the custom Qt theme.
+- Browser/Driver recommendation and Driver-help prompts use a responsive two-column action layout instead of a QMessageBox single-row button bar, preventing clipped button labels on scaled displays.
+- Help/About and content-download settings are constrained to the current screen's available logical geometry, and long form rows may wrap instead of forcing dialogs off-screen.
+- Result sorting/sampling combo boxes no longer have restrictive maximum widths that could truncate translated labels.
+- Application/bootstrap/build version strings are synchronized through package `__version__`.
+
+
+## v2.4.3 fixes
+
+- Fresh installations now start in English; User Guide, Parameter Guide, and About follow the selected interface language instead of showing English and Chinese together.
+- About now identifies only Dr. Dingjia Liu as author and adds the BFSU Corpus Team official website, BFSUNLP GitHub page, and BFSU LexiScope project page.
+- Google News 2026-style `a[jsname="YKoRaf"]` result cards using opaque `google.* /goto?url=CAES...` links are treated as real results rather than discarded as Google UI links. This fixes the post-verification `live_results > 0` / `parsed_candidates = 0` termination bug.
+- When full-text downloading follows a Google News redirect successfully, WebLens replaces the stored redirect with the final destination URL and fills missing metadata where available.
+
+
+## 2.4.2 human-verification live-DOM recovery fix
+
+This maintenance release fixes a second post-CAPTCHA recovery race observed on Google. After a user completed human verification, the browser could already display a normal result page while WebLens continued to print "Still waiting for human verification". The cause was that the recovery loop still relied mainly on serialized HTML/result-card selectors; Google's live DOM can expose visible result headings before those older parser signatures are recognized.
+
+Changes in 2.4.2:
+
+- Verification recovery now gives priority to the browser's **live DOM**. Visible Google/Baidu result headings and principal result links override stale CAPTCHA strings/scripts left in the document.
+- WebLens now reads `document.documentElement.outerHTML` at recovery time, with Selenium `page_source` only as a fallback, so the parser receives the same page the user is actually seeing.
+- The wait heartbeat now reports diagnostic state (`live_results`, parsed candidates, explicit no-result state, `readyState`, and current URL) instead of the ambiguous generic "Still waiting" message.
+- Google result parsing now additionally traces `#search/#rso` heading nodes to their surrounding result link so the post-verification readiness detector and record parser use compatible signals.
+- No browser navigation is sent while human verification is active. Closing the WebLens notice does not force navigation; collection resumes automatically when the live result DOM is stable for two consecutive polls.
+
+
+## 2.4.1 verification-resume fix
+
+- Fixed a Google CAPTCHA recovery race: returning to a `/search` URL is no longer considered sufficient to resume parsing.
+- After manual verification, WebLens waits for real result-card links (or an explicit no-result message) to be stable across two polls before continuing.
+- This prevents a transient post-CAPTCHA search shell from being misclassified as an empty result page and terminating collection.
+
+
+BFSU WebLens is the web/news corpus collection component of BFSU LexiScope. It collects search-engine result links with a real Chrome or Edge browser, supports result curation and sampling, downloads source webpages, extracts metadata, and prepares clean text for corpus construction.
+
+## 1. PySide6 / Qt interface
+
+Version 2.4 keeps the fixed warm-light BFSU EditTrac palette while using standard PySide6 controls and the system UI font.
+
+- Main window: `QMainWindow`, native menus, `QToolBar`, `QSplitter`, `QFormLayout`, `QTableView`, standard dialogs and Qt background-thread signals.
+- Google and Baidu are selected through a compact search-engine selector rather than full tab pages.
+- Application-level commands appear only once in the main toolbar.
+- Toolbar commands use orange-accent icons and bordered tool buttons so they are visually recognizable as actions.
+- Query and site/domain text boxes show three text lines; scrollbars appear only when additional lines are entered.
+- The site/domain label is split across two lines so the form remains readable at high DPI.
+- Combo-box, spin-box and date controls use a quieter integrated subcontrol style rather than visually heavy arrow buttons.
+- The left settings pane retains a readable minimum logical width and remains vertically scrollable at Windows 125–200% scaling.
+
+## 2. Application-wide browser and Selenium settings
+
+Open **Settings → Browser & Selenium… / 设置 → 浏览器与 Selenium…** once. Google, Baidu, future search engines and Selenium-based content downloading share the same configuration.
+
+The global settings include:
+
+- Chrome or Edge;
+- detected local browser installations and versions;
+- optional manually selected browser executable;
+- matching ChromeDriver/EdgeDriver;
+- automatic Driver detection/update;
+- page-render wait, default **5000 ms**;
+- **Do not show the collection browser window / 不显示采集浏览器界面**.
+
+The settings dialog keeps labels and their controls on the same row. Browser installation/version entries are not intentionally wrapped onto a second line.
+
+## 3. Browser/Driver readiness gate
+
+Search collection is disabled until WebLens can confirm both:
+
+1. a valid selected Chrome/Edge installation and version; and
+2. a compatible WebDriver.
+
+When the environment is not ready, WebLens displays an environment warning and disables search-collection controls and the Start action. The user can still import/export or inspect existing result data.
+
+Browser preparation is backend-specific. For Chrome, WebLens can download the current Chrome for Testing Stable archive into `tools/browser` and prepare the exact matching ChromeDriver. For Edge, WebLens detects the system-installed Microsoft Edge by default and prepares a compatible EdgeDriver. If Edge is not installed, WebLens directs the user to the official Microsoft Edge download page rather than trying to create a non-existent portable Edge distribution.
+
+## 4. Search-result collection model
+
+Search-result collection is browser-only.
+
+- Google/Baidu result-page collection has no Requests/HTTP backend.
+- WebLens does not set a results-per-page value.
+- WebLens does not set or enforce a maximum page count.
+- Initial search URLs contain no WebLens-generated Google `num/start` or Baidu `rn/pn` pagination directives.
+- Subsequent pages are reached only by following the search engine's own rendered **Next** link.
+- The selected real browser's own User-Agent is used; WebLens does not force a fixed browser User-Agent for search collection.
+
+Requests remains available only for downloading already collected destination webpages.
+
+## 5. Date restriction is opt-in
+
+Date restriction is **off by default**.
+
+- When **Restrict collection by date / 限定爬取日期** is not checked, the start date, end date and date-slice controls are disabled and WebLens sends no Google/Baidu date-range parameter.
+- When the user checks the option, the date controls become available and the chosen range is sent to the selected search engine.
+- Google uses its custom-date parameter only in this enabled state.
+- Baidu uses its date parameter only in this enabled state.
+- Calendar popups have wider month/year navigation controls to avoid truncated `…` labels under display scaling.
+
+The page-turn wait range is reused between result pages, between date slices and before the one retry after a transient page-load error.
+
+## 6. Google result parsing improvements
+
+Version 2.4 strengthens the Google browser path in several places:
+
+- no accidental default restriction to “today” when the user has not enabled date filtering;
+- after `document.readyState`, Selenium waits for a recognizable result container, terminal no-result state or verification state before parsing;
+- result parsing recognizes multiple current Google Web/News title-link/card variants and retains conservative fallback extraction;
+- search-engine navigation and page chrome are not treated as corpus results;
+- a genuine empty page terminates the collection task;
+- human verification pauses navigation until the user completes it manually.
+
+## 7. Collected-link output
+
+The left output group is explicitly named **Collected-link output / 采集链接保存**. The main path field is **Collected-link save location / 爬取链接保存位置**, making it clear that this file stores the collected result-link table rather than downloaded webpage contents.
+
+Supported result exports remain XLSX, CSV, TXT, DOCX and XML.
+
+## 8. Flexible URL import
+
+**Import links / 导入链接** accepts both WebLens exports and user-created URL lists.
+
+Supported workflows include:
+
+- TXT/text file: one URL per line;
+- headerless XLSX: URL in the first column, one per row, including the first row;
+- headerless CSV: URL in the first column, one per row;
+- CSV/TSV/text files containing URLs;
+- WebLens XLSX/CSV/TXT/XML/DOCX exports with their existing metadata fields;
+- an XLSX import template created through **File → Download import template / 文件 → 下载导入模板**.
+
+Only the URL is required. A manually imported URL may have an empty title/source/date. It is still shown immediately in Result Preview, and successful target-page content downloading can supplement an empty title and publication time from extracted webpage metadata.
+
+## 9. Result Preview
+
+The table column order begins with:
+
+**No. → Link → Collected time → Title → Source → Published time → …**
+
+This makes URL-only imports usable even before metadata has been enriched.
+
+Result tools retain open link, delete, sorting, sampling, selected/all content download and content-download settings. Sorting is consolidated into one selector.
+
+## 10. Browser discovery and Driver management
+
+### Windows
+
+WebLens checks common Chrome/Edge Stable/Beta/Dev/Canary paths, Windows App Paths registry entries and `PATH`.
+
+### macOS
+
+WebLens checks `/Applications` and `~/Applications` for common Chrome/Edge channels and distinguishes Intel/Apple Silicon when selecting downloadable Drivers.
+
+### Linux
+
+Common Google Chrome, Chromium and Microsoft Edge executables available through `PATH` are detected.
+
+WebLens no longer bundles a fixed Driver version. Compatible Drivers are detected in configured paths, WebLens cache, Selenium cache and `PATH`; a matching Driver can be downloaded from official vendor distribution endpoints.
+
+## 11. Settings structure
+
+```json
+{
+  "ui_lang": "en",
+  "browser": {
+    "fetch_backend": "selenium_chrome",
+    "browser_binary_path": "...",
+    "browser_driver_path": "...",
+    "browser_wait_ms": 5000,
+    "browser_headless": false
+  },
+  "google": {
+    "date_filter_enabled": false
+  },
+  "baidu": {
+    "date_filter_enabled": false
+  }
+}
 ```
 
-- The backend still accepts semicolon-separated values for compatibility with earlier settings.
-- Help/About/User Guide/Parameter Guide have been expanded and synchronized.
-- `build_exe.bat` now builds from an isolated local virtual environment `.venv_build`, so the released desktop app is less affected by packages installed in the user's daily Python/Conda environment.
-- The script still keeps important runtime components: `assets`, `tools`, README, requirements, Selenium support, newspaper3k, openpyxl, python-docx, charset repair, and multilingual extraction dependencies. It builds a PyInstaller **onedir** package with this intended layout:
+Older untouched `3500 ms` render-wait defaults are migrated to `5000 ms` when settings are loaded.
+
+## 12. Run from source
+
+Python 3.10+ is recommended.
 
 ```text
-dist/
-  BFSU_WebLens/
-    BFSU_WebLens.exe
-    README.md
-    requirements.txt
-    _internal/
-      assets/
-      tools/
-      ...dependencies...
+pip install -r requirements.txt
+python main.py
 ```
 
-The executable is placed at the outer level; dependencies and resources are placed in `_internal`.
+The entry point is `main.py`, which launches `bfsu_weblens.app`.
 
-## 3. Engine panels
+## 13. Windows package build
 
-### 3.1 Google panel
-
-The Google panel supports:
-
-- Google Web search.
-- Google News vertical search.
-- Query-helper modes:
-  - Single term.
-  - Any term / OR.
-  - All terms.
-  - Exact phrase.
-  - Any exact phrase / OR.
-  - Raw Google query.
-- Result-language restriction through Google `lr`.
-- Country/region restriction through Google `cr`.
-- Site/domain filtering through `site:` syntax and local URL filtering.
-- Date slicing with configurable day step.
-- Conservative page/slice/error delays.
-- Requests or Selenium Chrome/Edge backend.
-- Selenium browser restart every N pages. Google default: `4`.
-
-### 3.2 Baidu panel
-
-The Baidu panel supports:
-
-- Baidu Web search.
-- Baidu News/Information search.
-- Baidu News - media sites using the observed `medium=1` filter.
-- Baidu sort options where Baidu respects the parameter.
-- Site/domain filtering by inserting `site:{domain}` into Baidu `wd`.
-- Date filtering using observed Baidu `gpc=stf=...|stftype=2` and `tfflag=1` parameters.
-- Requests-first workflow, with Selenium available if needed.
-
-The Baidu panel intentionally does **not** include:
-
-- Google-style language restriction.
-- Google-style country/region restriction.
-- Google Any/OR helper modes.
-- Bing controls.
-
-## 4. Important default values
-
-| Parameter | Google default | Baidu default | Meaning |
-|---|---:|---:|---|
-| Day step | 7 | 0 | Number of days per date slice. `0` means no slicing. |
-| Max pages per slice | 30 | 100 | Maximum search-result pages requested inside each date slice. |
-| Stop after no-new pages | 1 | 1 | Stop the current slice after N consecutive pages add no new valid links. |
-| Browser restart every N pages | 4 | 0 | Selenium search-session browser reset interval. `0` disables page-count reset. |
-| Page delay | 30,000–90,000 ms | 30,000–90,000 ms | Random wait between search-result pages. |
-| Content fetch mode | mixed | mixed | Requests first + Selenium fallback. |
-| Content retry count | 1 | 1 | Retry failed content URLs before marking failure. |
-| Single content task timeout | 300 s | 300 s | Hard GUI-level timeout for one content URL. |
-| Resume content downloads | enabled | enabled | Skip already successful content URLs based on manifest. |
-
-## 5. Parameter guide
-
-### Panel
-
-Choose the engine workflow. Google and Baidu results do not share one preview table. Sampling, export, and content download actions apply to the active panel only.
-
-### Query mode
-
-Google includes helper modes for OR and exact phrase OR. Baidu removes those helper modes because Baidu query behavior is less stable with complex Boolean expressions. Raw query mode remains available for expert users.
-
-### Search terms / phrases
-
-Enter topic words or phrases. One item per line is recommended. In raw query mode, WebLens treats the text as the query expression.
-
-### Site/domain filters
-
-This is a multi-line field. Put one domain, suffix, or `site:` expression per line.
-
-Examples:
+From the WebLens project directory:
 
 ```text
-people.com.cn
-xinhuanet.com
-.gov
-.edu.cn
-site:thepaper.cn
-```
-
-How WebLens uses this field:
-
-- **Google**: adds `site:` constraints to the query and applies local URL filtering after parsing.
-- **Baidu**: inserts `site:{domain}` into the Baidu `wd` query and applies local URL filtering after parsing.
-- **Domain suffixes**: `.gov`, `.edu.cn`, `.gov.cn` match hosts ending with those suffixes.
-- **Raw query caution**: if raw query already contains `site:`, leave this field empty to avoid duplicate constraints.
-
-For strict source-specific corpora, run separate tasks for each domain when possible, because search engines may handle complex `site:a OR site:b` expressions differently.
-
-### Search vertical
-
-- Google Web: ordinary search-result pages.
-- Google News: adds `tbm=nws`.
-- Baidu Web: uses `tn=baidu`.
-- Baidu News/Information: uses `tn=news&cl=2`.
-- Baidu News - media sites: adds `medium=1`.
-
-### Baidu sort
-
-- Focus/relevance: observed `rtt=1` behavior.
-- Time: observed time-sort behavior where Baidu respects it.
-
-Baidu may change its behavior, so WebLens always records `search_url` for verification.
-
-### Language and country/region restrictions
-
-These are Google-only controls.
-
-- `lr` restricts result document language, for example `lang_en`.
-- `cr` restricts Google's country/region result collection, for example `countryUS`.
-
-These are search constraints, not final truth about outlet location, author nationality, or document quality.
-
-### Date range and day step
-
-Start date and End date define the total search window.
-
-Day step controls slicing:
-
-- `0`: no slicing; search the full date window as one slice.
-- `1`: daily slices.
-- `7`: weekly slices.
-
-Smaller slices reduce truncation bias for popular topics but increase request count and runtime.
-
-### Max pages per slice
-
-Maximum pages requested within one date slice. If day step is small, this value applies separately to each slice.
-
-### Stop after no-new pages
-
-Stops a slice after N consecutive pages add no new valid URLs after filtering and deduplication. Default is `1`.
-
-### Fetch backend
-
-- Requests: faster and lighter, but cannot execute JavaScript.
-- Selenium Chrome/Edge: opens a real browser; useful for rendered pages, debugging, captcha/redirect diagnosis, and pages where requests returns incomplete HTML.
-
-### Browser restart every N pages
-
-Only affects Selenium search-result crawling.
-
-- `0`: do not automatically restart by page count.
-- Google default: `4`.
-- Baidu default: `0`.
-
-### Delays
-
-- Page delay: wait between result pages.
-- Slice delay: wait between date slices.
-- Error cooldown: wait after temporary failures.
-
-All values are milliseconds. Defaults are conservative to reduce access pressure and improve reproducibility.
-
-### Output format
-
-XLSX is recommended for research logging. CSV, TXT, DOCX, and XML are also available.
-
-## 6. Content download guide
-
-After crawling or importing links, use **Download selected content** or **Download all content**.
-
-Content download settings include:
-
-- Content folder.
-- Content threads.
-- Content fetch mode.
-- Content page delay.
-- Content receive/render wait.
-- Cleaning scheme.
-- Retry failed content N times.
-- Single content task timeout seconds.
-- Resume content downloads.
-- Domain lock timeout.
-
-Downloaded content is saved to subfolders such as:
-
-```text
-content_downloads/
-  raw_html/
-  raw_text/
-  clean_text/
-  metadata/
-  content_manifest.jsonl
-  content_metadata.xlsx
-```
-
-### Breakpoint continuation
-
-If the software or computer is force-closed during content downloading:
-
-1. Restart WebLens.
-2. Load/crawl/import the same links.
-3. Select the same content download folder.
-4. Start content download again.
-
-WebLens reads `content_manifest.jsonl` and skips URLs already marked successful. Failed, timed-out, or unfinished URLs are attempted again.
-
-This feature applies **only to content downloading**. Search-result crawling is not resumed automatically.
-
-## 7. Multilingual extraction strategy
-
-WebLens does not assume that every page is English or that `newspaper3k` can parse every site. The download pipeline uses layered fallback:
-
-1. Preserve raw bytes when available.
-2. Detect declared and apparent encoding.
-3. Repair common mojibake, especially UTF-8 text wrongly decoded as Latin-1.
-4. Try `newspaper3k` if available.
-5. Use built-in source templates for known news sites.
-6. Extract from `article`, `main`, `content`, `post`, `story`, or similar candidate containers.
-7. Fall back to visible-text extraction.
-8. Save clean TXT and metadata even when extraction is imperfect.
-
-This improves Chinese pages returned by Baidu and also helps other non-English sources where specialized extractors fail.
-
-## 8. Desktop build
-
-Use Windows command prompt or PowerShell in the project directory:
-
-```bat
 build_exe.bat
 ```
 
-The script now creates and uses a local build-only virtual environment:
+To rebuild the isolated build environment:
 
 ```text
-.venv_build
-```
-
-This keeps the PyInstaller build independent from the user's normal Python, Anaconda, or PyCharm environment and reduces accidental dependency bloat. To recreate the build environment from scratch after changing dependencies, run:
-
-```bat
 build_exe.bat --fresh
 ```
 
-The script installs `requirements.txt` inside `.venv_build`, then uses PyInstaller onedir mode with `_internal` as the dependency/resource folder:
-
-```bat
---onedir --contents-directory "_internal"
-```
-
-Target output:
+## 14. Project layout
 
 ```text
-dist\BFSU_WebLens\BFSU_WebLens.exe
-dist\BFSU_WebLens\_internal\...
+BFSU_WebLens/
+├─ main.py
+├─ build_exe.bat
+├─ build_macos_arm64.sh
+├─ build_macos_intel.sh
+├─ build_macos_common.sh
+├─ build_probe.py
+├─ clean_build.bat
+├─ clean_build.sh
+├─ run.bat
+├─ requirements.txt
+├─ requirements-build.txt
+├─ config/
+│  └─ default_settings.json
+├─ assets/
+├─ tools/
+└─ bfsu_weblens/
+   ├─ app.py
+   ├─ browser_manager.py
+   ├─ collector.py
+   ├─ content_downloader.py
+   ├─ data.py
+   ├─ exporter.py
+   ├─ importer.py
+   ├─ manual_collection.py
+   ├─ platform_paths.py
+   ├─ resources.py
+   └─ ui/
+      ├─ main_window.py
+      └─ theme.py
 ```
 
-Important components are kept in the release: `assets`, `tools`, Selenium support, newspaper3k, openpyxl, python-docx, charset detection/repair, and multilingual text extraction dependencies. For release, zip the entire `dist\BFSU_WebLens` folder. Do not move `BFSU_WebLens.exe` away from `_internal`, because the executable depends on files inside `_internal`.
+**BFSU Corpus Research Team / 北外语料库团队**
 
-## 9. Compliance and disclaimer
+## 10. Version 2.4 interaction refinements
 
-BFSU WebLens is intended for lawful, modest, research-oriented web discovery and corpus preparation. Users are responsible for respecting:
-
-- Website terms of service.
-- Robots/access policies.
-- Copyright and database rights.
-- Privacy and personal data rules.
-- Institutional requirements.
-- Rate limits and technical access controls.
-- Applicable laws and regulations.
-
-The software does not guarantee complete retrieval, stable search-engine behavior, exact metadata, successful extraction from every source, or rights clearance for downloaded content. Search engines and news sites may change layout or impose access controls at any time. Use conservative delays, review samples, retain source URLs, and verify outputs before analysis, redistribution, or publication.
-
----
+- The main title bar shows the full application version.
+- Collection progress and task status are shown only in the bottom status bar; they no longer consume collector-panel space.
+- Start collection and Stop collection use visually distinct toolbar treatments. Stop collection affects search collection only.
+- Content controls are left-aligned in Result Preview. A separate **Stop download** button is enabled only while a content-download task is running.
+- Start and end dates default to today when date restriction is off. Invalid saved ranges are normalized, and interactive date changes keep Start date ≤ End date.
+- In the Chinese interface, Google language and country/region choices display `中文名称 (English name)`.
+- User Guide, Parameter Guide and About use a full logo/header/content-card layout. All three present English first and Chinese second. About explicitly distinguishes Dr. Dingjia Liu's project-author/lead-developer role from OpenAI GPT's AI-assisted development role.
+- Baidu restores a **Multiple terms (search one by one)** mode. Each non-empty input line is submitted as a separate Baidu search and fully paginated before the next term; WebLens never joins those terms with `OR`.
 
 
-### Selenium packaging fix in v1.2.4
+## Building releases / 发布打包
 
-The build script now explicitly collects Selenium's dynamically imported browser-driver modules, including `selenium.webdriver.chrome.webdriver` and the Edge equivalents. If an older packaged desktop build reports `No module named 'selenium.webdriver.chrome.webdriver'`, rebuild with:
+### Windows x64
 
-```bat
-build_exe.bat --fresh
-```
+Run `build_exe.bat`. The BAT file only launches `build_launcher.py`; the active virtualenv/Conda interpreter may be used as the bootstrap Python. If the bootstrap belongs to Conda, WebLens creates a separate private Conda prefix at `.venv_build_windows` with Python 3.12 and pip. Standard CPython/venv bootstraps create an isolated venv. Runtime and build dependencies are then installed only into this private environment.
 
-Then redistribute the entire `dist\BFSU_WebLens` folder. Do not copy only the executable, because Selenium, browser-driver helpers, resources, and Python libraries are stored under `_internal`.
+It is safe to launch the BAT from a PyCharm terminal with `bfsu_lexiscope` already activated. The active environment is not inherited as the runtime of the build package: after the private environment is created, the builder removes outer Conda/venv/Python/Qt variables and rebuilds `PATH` from the private prefix and Windows system directories. No `--system-site-packages` mode is used.
 
-# BFSU WebLens v1.2.8 中文说明
+PyInstaller uses `--onedir --contents-directory _internal`: `BFSU_WebLens.exe` stays at the top level and runtime files are placed under `_internal`. The builder validates `qwindows.dll`, runs the frozen application with external Python/Conda/Qt paths removed, creates `release/BFSU_WebLens_v<version>_windows_x64.zip`, and verifies the ZIP contents.
 
-BFSU WebLens 是 **BFSU LexiScope** 工具箱的桌面组件，面向语料库研究中的低频、可审计网页检索、新闻检索、URL 发现和正文下载。
+Build logs are written to both `build_logs/build_launcher.log` and `build_logs/build_windows.log`.
 
-作者与项目主导：**刘鼎甲，北京外国语大学**。ChatGPT 参与需求分析、原型设计、代码生成、重构、测试思路、文档起草和调试建议。软件构想、语料库工作流、命名、参数策略和最终使用决策由刘鼎甲主导。
+Run: `build_exe.bat`
 
-## 软件下载
+### macOS Apple Silicon
 
-Windows 发布版可通过百度网盘下载：
+Run on an Apple Silicon Mac with an arm64 Python/Conda environment: `./build_macos_arm64.sh --fresh`
 
-- **分享文件：** `BFSU_WebLens_v1.2.8.zip`
-- **下载链接：** https://pan.baidu.com/s/1UXTRIJpFbXJnMCHMTxbWPA?pwd=kvst
-- **提取码：** `kvst`
+The script builds an arm64 ONEDIR/windowed `.app`, creates a native `.icns`, performs ad-hoc code signing, runs a frozen Qt smoke test, and writes `release/BFSU_WebLens_v<version>_macos_arm64.zip` using `ditto` so macOS metadata is preserved.
 
-下载后请完整解压压缩包，并保持主程序、`_internal` 目录及其它配套文件的相对位置不变，避免只复制或移动可执行文件而导致程序无法正常运行。
+### macOS Intel
 
+Run on an Intel Mac, or with an x86_64/Rosetta Python environment on Apple Silicon: `./build_macos_intel.sh --fresh`
 
-### v1.2.8 窗口位置修复
-- 主窗口只在启动阶段按照 Windows 可用工作区定位一次；后台事件队列不再反复居中窗口，因此用户拖动窗口后不会自动弹回原位置。
-- 窗口定位会区分 CustomTkinter 的逻辑尺寸与显示器物理像素，并使用扣除任务栏后的 Windows 工作区，避免高 DPI 缩放下右侧和底部藏到桌面之外。
+The source Python architecture is checked before the build. The release is written to `release/BFSU_WebLens_v<version>_macos_x86_64.zip`. The script deliberately fails early if the Python architecture does not match the requested target, because PyInstaller can only produce a valid target architecture when the Python environment and binary dependencies support it.
 
-### v1.2.8 界面细化
-- Google 的“每页结果数”默认值改为 **10**，并写入 `config/default_settings.json`；旧版中仍为原默认值 50 的设置会自动迁移为 10。
-- 软件启动时左侧设置区更宽；Google/百度标签压缩并移至左上角。
-- 顶部操作栏新增“打开下载文件夹”，可创建并打开当前面板的正文下载目录。
-- 结果预览工具按“记录操作、排序、采样、正文下载”划分为带边框的功能区，避免按钮混杂或显示不全。
+Python selection on macOS: `BFSU_WEBLENS_PYTHON` → active `VIRTUAL_ENV/bin/python` → active `CONDA_PREFIX/bin/python` → `python3` → `python`. Conda, standard `venv`, and ordinary Python installations are supported.
 
-## 1. v1.2.8 界面重构
+### Build safeguards
 
-- **保留 WebLens 原有传统布局与传统菜单栏**，Google/百度标签页、左侧设定栏、右侧结果预览和日志区域的位置及工作流程不变。
-- 框架、分组面板、按钮、输入框、下拉框、复选框、多行文本框、进度条、标签页、可拖动分栏、日期控件和应用内对话框均优先采用 **CustomTkinter**。仅传统菜单、结果 Treeview、多选 Listbox 等 CTk 无直接替代的组件保留原生 Tk/ttk。
-- 间距、控件高度、字体节奏、表面配色、边框和圆角进一步与 **BFSU ClearLens / LexiScope** 统一，避免标签与输入区过于拥挤。
-- 左侧设定栏改用 CTk 滚动框；鼠标位于设定栏任意区域时均可平滑滚动，包括检索词、域名文本框以及语种/国家地区多选列表。
-- 启用 Windows 11 每显示器 DPI 感知；原生菜单与 Treeview 采用 DPI 适配指标；主窗口及所有应用内子窗口会根据屏幕可用区域自动限制尺寸并居中，避免打开后只显示局部。
-- 图标按 ClearLens 风格重新绘制：深蓝背景、青绿色放大镜、白色网络地球和 BFSU 标识；提供专用小尺寸 PNG 与 16–256 px 多分辨率 ICO，提高任务栏和标题栏清晰度。
-- 关于、说明、设置、正文下载设置和日期选择窗口均统一采用 CTk 风格，并应用产品图标。
-- 作者信息：**Dr. Liu Dingjia / 刘鼎甲 博士**，邮箱 **djliu@bfsu.edu.cn**。
+The build system incorporates safeguards learned from BFSU EditTrac packaging: isolated build virtual environments, PySide6-only Qt selection, dependency probing, source compilation, architecture validation, frozen-application smoke tests, exclusion of other Qt bindings, and release ZIP validation. On Windows, the script also locates the authoritative Qt plugin tree before packaging and installs a private `qwindows.dll` fallback only when PyInstaller did not expose the platform plugin in a standard `_internal` location. The smoke test is then launched with Conda/Qt environment variables cleared so it cannot accidentally succeed by loading Qt from the developer environment. On macOS, the release script verifies that `libqcocoa.dylib` is inside the `.app` and runs the frozen smoke test with external Qt/Python paths cleared. `clean_build.bat` and `./clean_build.sh` remove build intermediates while retaining `release/`.
 
-## 1. v1.2.4 主要变化
+## Windows slim build (v3.1.4)
 
-- Google 和百度面板中的 **站点/域名限定** 改为多行输入框。
-- 支持每行填写一个来源域名或域名后缀，例如：
+The Windows release builder now uses a private minimal build environment and never exposes the whole development Conda environment through `--system-site-packages`. WebLens installs `PySide6-Essentials` rather than the full `PySide6`/Addons stack because the application uses only QtCore, QtGui and QtWidgets.
 
-```text
-people.com.cn
-xinhuanet.com
-.gov.cn
-.edu.cn
-site:thepaper.cn
-```
+If the bootstrap Python belongs to Conda, the builder creates a private Conda prefix at `.venv_build_windows` with Python 3.12 and pip. If the bootstrap is standard CPython/venv, it creates a normal isolated `venv`. Both paths then install only `requirements.txt` and `requirements-build.txt`.
 
-- 后端继续兼容英文分号分隔的旧设置。
-- 扩写 About、User Guide、Parameter Guide 和 README。
-- 检查并优化 `build_exe.bat`，用于通过本地 `.venv_build` 虚拟环境构建 PyInstaller onedir 桌面版，减少日常 Python/Conda 环境对发布包的干扰，同时保留 Selenium、newspaper3k、openpyxl、python-docx、编码修复、多语种抽取、assets 和 tools 等关键组件。
-
-## 2. Google 面板
-
-Google 面板支持网页检索和新闻检索，支持检索辅助模式、语种限定、国家/地区限定、站点/域名限定、日期切片、保守延时和 Selenium 浏览器模式。
-
-## 3. 百度面板
-
-百度面板支持百度网页、百度资讯、百度资讯媒体网站。百度通过 `wd` 中的 `site:{domain}` 实现站点限定，通过观察到的 `gpc/tfflag` 实现日期范围过滤，通过 `medium=1` 实现媒体资讯过滤。百度面板不显示 Google 专用语种/国家地区控件和 Google 风格 OR 辅助模式。
-
-## 4. 站点/域名限定
-
-现在是多行输入框。建议每行一个域名、后缀或 `site:` 表达式。
-
-- Google：写入 `site:` 查询约束，并在解析后本地过滤 URL。
-- 百度：写入 `wd` 中的 `site:{domain}`，并在解析后本地过滤 URL。
-- 如果原始查询式已经写了 `site:`，这里应留空。
-- 如果要做严格来源语料库，建议对重点域名单独分批采集。
-
-## 5. 正文下载断点续传
-
-正文下载支持 manifest 断点续传。每条成功下载会立即写入 `content_manifest.jsonl`。软件或电脑强制关闭后，重新选择同一下载文件夹并下载同一批链接时，已成功 URL 会跳过，失败或未完成 URL 会继续尝试。
-
-该机制只用于正文下载，不用于搜索结果爬取。
-
-## 6. 桌面版打包
-
-运行：
-
-```bat
-build_exe.bat
-```
-
-打包脚本会创建并使用本地构建虚拟环境：
-
-```text
-.venv_build
-```
-
-这样可以避免把日常 Python、Anaconda 或 PyCharm 环境中的无关包带入发布版。依赖变化较大时，可运行：
-
-```bat
-build_exe.bat --fresh
-```
-
-该命令会删除旧的 `.venv_build` 并重新安装 `requirements.txt`。输出结构：
-
-```text
-dist\BFSU_WebLens\BFSU_WebLens.exe
-dist\BFSU_WebLens\_internal\...
-```
-
-关键组件会保留：`assets`、`tools`、Selenium、newspaper3k、openpyxl、python-docx、编码检测/修复与多语种正文抽取依赖。发布时压缩整个 `dist\BFSU_WebLens` 文件夹。不要把 exe 单独拿出来运行。
-
-## 7. 免责声明
-
-本工具仅用于合法、低频、研究导向的网页发现和语料准备。用户应遵守网站服务条款、robots/访问政策、版权、隐私、单位管理规定、访问频率限制和适用法律。软件不保证检索结果完整、搜索引擎行为稳定、元信息完全准确、所有来源均可干净抽取，也不保证下载内容具有再发布或再分发权利。正式研究、发表或共享数据前，请使用保守延时、抽样核查、保留来源 URL，并复核输出结果。
-
-
-### v1.2.4 Selenium 打包修复
-
-打包脚本现在会显式收集 Selenium 动态导入的浏览器驱动模块，包括 `selenium.webdriver.chrome.webdriver` 以及 Edge 对应模块。如果旧的桌面版运行时报 `No module named 'selenium.webdriver.chrome.webdriver'`，请使用以下命令重新构建：
-
-```bat
-build_exe.bat --fresh
-```
-
-发布时请压缩并分发整个 `dist\BFSU_WebLens` 文件夹，不要只复制 exe。Selenium、浏览器驱动辅助模块、资源文件和 Python 依赖都位于 `_internal` 中。
-
-## Manual Google verification waiting / Google 验证码手动等待
-
-When the Selenium Chrome/Edge backend reaches a Google human-verification page, WebLens no longer ends the crawl immediately. It preserves the current browser window and pauses all crawler navigation. While verification remains visible, WebLens does not refresh the page, request another URL, paginate, or restart the browser. The user can complete the verification manually in the browser. WebLens checks the currently displayed page at a short interval without navigating; after the normal search page remains visible, WebLens refreshes the current page once and resumes parsing and crawling automatically. If verification appears again after the refresh or later in the task, the same waiting procedure is entered again. The Stop button remains effective during the wait.
-
-当 Selenium Chrome/Edge 后端进入 Google 真人验证页面时，WebLens 不再立即结束采集任务，而是保留当前浏览器窗口并暂停所有采集导航。验证未通过期间，程序不会刷新页面、请求其他 URL、翻页或重启浏览器。用户可直接在浏览器中手动完成验证。WebLens 会以较短间隔读取当前页面状态，但不会触发导航；确认正常搜索结果页已经稳定显示后，程序会自动刷新当前页一次，并继续解析和采集。如果刷新后或后续采集过程中再次出现验证页，程序会再次进入相同的等待状态。等待期间“停止”按钮仍然有效。
-
+PyInstaller explicitly excludes unrelated scientific, ML, notebook and alternate Qt stacks. After packaging, unused Qt QML/translations/plugin payloads are pruned conservatively and the frozen `--qt-smoke-test` is run again. A bundle-size report is written to `build_logs/bundle_size_report.txt`; the release ZIP is created under `release/`.

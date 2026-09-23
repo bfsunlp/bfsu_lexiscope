@@ -129,3 +129,35 @@ def export_xml(rows: list[dict], path: Path) -> None:
             child.text = str(row.get(field, ""))
     tree = ET.ElementTree(root)
     tree.write(path, encoding="utf-8", xml_declaration=True)
+
+
+def export_import_template(output_path: str | Path) -> None:
+    """Create a simple user-facing URL import template.
+
+    Only the ``link`` column is required.  Optional metadata can be filled when
+    available; missing title/source/date values can be supplemented during
+    content download.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Import URLs"
+    headers = ["link", "title", "source", "published_time"]
+    ws.append(headers)
+    ws.append(["https://example.com/article", "", "", ""])
+    fill = PatternFill("solid", fgColor="C96F32")
+    font = Font(color="FFFFFF", bold=True)
+    for cell in ws[1]:
+        cell.fill = fill
+        cell.font = font
+        cell.alignment = Alignment(horizontal="center")
+    widths = [62, 42, 24, 22]
+    for idx, width in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    ws.freeze_panes = "A2"
+    wb.save(path)

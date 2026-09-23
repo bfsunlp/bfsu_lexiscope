@@ -97,7 +97,7 @@ class ContentDownloadSettings:
     selenium_backend: str = "selenium_chrome"  # selenium_chrome | selenium_edge
     selenium_driver_path: str = ""
     selenium_binary_path: str = ""
-    selenium_wait_ms: int = 3500
+    selenium_wait_ms: int = 5000
     selenium_headless: bool = False
     retry_count: int = 1
     task_timeout_seconds: int = 300
@@ -1585,7 +1585,7 @@ def fetch_with_selenium_fallback(url: str, settings: ContentDownloadSettings) ->
             except Exception:
                 pass
             driver.get(url)
-            wait_seconds = max(0.5, int(getattr(settings, "selenium_wait_ms", 3500) or 3500) / 1000.0)
+            wait_seconds = max(0.5, int(getattr(settings, "selenium_wait_ms", 5000) or 5000) / 1000.0)
             time.sleep(wait_seconds)
             try:
                 driver.execute_script("return document.readyState")

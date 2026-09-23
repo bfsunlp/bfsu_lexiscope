@@ -555,16 +555,16 @@ BAIDU_SORT_OPTIONS = [
  {'key': 'time', 'labels': {'en': 'Baidu time sort', 'zh_sim': '百度按时间排序', 'zh_tra': '百度按時間排序'}},
 ]
 
-FETCH_BACKEND_OPTIONS = [{'key': 'selenium_chrome',
-  'labels': {'en': 'Selenium Chrome browser (recommended)',
-             'zh_sim': 'Selenium Chrome 浏览器模式（推荐）',
-             'zh_tra': 'Selenium Chrome 瀏覽器模式（推薦）'}},
+FETCH_BACKEND_OPTIONS = [
+ {'key': 'selenium_chrome',
+  'labels': {'en': 'Google Chrome',
+             'zh_sim': 'Google Chrome',
+             'zh_tra': 'Google Chrome'}},
  {'key': 'selenium_edge',
-  'labels': {'en': 'Selenium Edge browser', 'zh_sim': 'Selenium Edge 浏览器模式', 'zh_tra': 'Selenium Edge 瀏覽器模式'}},
- {'key': 'requests',
-  'labels': {'en': 'Requests HTTP mode (lightweight)',
-             'zh_sim': 'Requests HTTP 模式（轻量）',
-             'zh_tra': 'Requests HTTP 模式（輕量）'}}]
+  'labels': {'en': 'Microsoft Edge',
+             'zh_sim': 'Microsoft Edge',
+             'zh_tra': 'Microsoft Edge'}},
+]
 
 CONTENT_FETCH_MODE_OPTIONS = [
  {'key': 'mixed',
