@@ -58,9 +58,10 @@ class SavedPageParseResult:
 def generate_manual_search_tasks(cfg: CollectorConfig) -> list[ManualSearchTask]:
     """Generate all initial search URLs implied by the current panel settings.
 
-    This mirrors automatic collection: Baidu multiple-term mode is expanded to
-    one task per term, and enabled date slicing creates one initial URL per
-    query/date unit. Pagination itself is intentionally left to the user.
+    This mirrors automatic collection exactly. For Baidu, multiple-term mode
+    and multiple site/domain lines are expanded into separate term × domain
+    tasks; enabled date slicing adds one initial URL per task/date unit.
+    Pagination itself is intentionally left to the user.
     """
     search_tasks = expand_search_tasks(cfg)
     if not search_tasks:
@@ -171,6 +172,19 @@ def _parse_google_date_range(tbs: str) -> tuple[date | None, date | None]:
     return parse(values.get("cd_min", "")), parse(values.get("cd_max", ""))
 
 
+def _site_filters_from_query(query: str) -> list[str]:
+    """Recover explicit site: filters from a saved search URL for metadata."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for value in re.findall(r"(?i)(?:^|[\s(])site:([^\s)]+)", query or ""):
+        item = value.strip().strip('"\'').rstrip(".,;:")
+        key = item.lower()
+        if item and key not in seen:
+            seen.add(key)
+            found.append(item)
+    return found
+
+
 def _parse_baidu_date_range(gpc: str) -> tuple[date | None, date | None]:
     match = re.search(r"stf=(\d+),(\d+)", gpc or "")
     if not match:
@@ -209,7 +223,7 @@ def config_for_saved_page(base_cfg: CollectorConfig, html_text: str, source_url:
             query_mode="raw",
             query_terms=[query] if query else [],
             raw_query=query,
-            site_filters=[],
+            site_filters=_site_filters_from_query(query),
             search_vertical=vertical,
             date_filter_enabled=date_enabled,
             start_date=shard_start,
@@ -229,7 +243,7 @@ def config_for_saved_page(base_cfg: CollectorConfig, html_text: str, source_url:
         query_mode="raw",
         query_terms=[query] if query else [],
         raw_query=query,
-        site_filters=[],
+        site_filters=_site_filters_from_query(query),
         search_vertical=vertical,
         language_lr=(params.get("lr") or [base_cfg.language_lr])[0],
         country_cr=(params.get("cr") or [base_cfg.country_cr])[0],

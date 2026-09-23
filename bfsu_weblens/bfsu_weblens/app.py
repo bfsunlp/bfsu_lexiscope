@@ -35,6 +35,29 @@ def _configure_frozen_qt_plugins() -> None:
             break
 
 
+def _run_maintenance_if_requested() -> None:
+    """Handle packaged maintenance commands before importing Qt.
+
+    This keeps reset/cleanup/uninstall helpers usable even if a Qt platform
+    plugin is damaged, and avoids starting any GUI infrastructure.
+    """
+    if "--maintenance" not in sys.argv:
+        return
+    try:
+        index = sys.argv.index("--maintenance")
+        action = sys.argv[index + 1] if index + 1 < len(sys.argv) else ""
+        from .maintenance import report_text, run_maintenance
+        report = run_maintenance(action)
+        print(report_text(report))
+        raise SystemExit(0 if report.ok else 2)
+    except SystemExit:
+        raise
+    except Exception as exc:
+        print(f"BFSU WebLens maintenance failed: {exc}")
+        raise SystemExit(3)
+
+
+_run_maintenance_if_requested()
 _configure_frozen_qt_plugins()
 
 from PySide6.QtCore import QCoreApplication, Qt  # noqa: E402
@@ -75,6 +98,19 @@ def main() -> None:
         for module_name in (
             "bs4", "charset_normalizer", "lxml_html_clean", "newspaper",
             "openpyxl", "docx", "requests", "selenium",
+            # Selenium webdriver implementations are reached indirectly at
+            # runtime.  Import them here so a release with incomplete Selenium
+            # packaging fails the build smoke test instead of failing later
+            # when collection starts.
+            "selenium.webdriver.chrome.webdriver",
+            "selenium.webdriver.chrome.options",
+            "selenium.webdriver.chrome.service",
+            "selenium.webdriver.edge.webdriver",
+            "selenium.webdriver.edge.options",
+            "selenium.webdriver.edge.service",
+            "selenium.webdriver.common.driver_finder",
+            "selenium.webdriver.common.selenium_manager",
+            "selenium.webdriver.remote.webdriver",
         ):
             importlib.import_module(module_name)
         for relative in ("assets/app_256.png", "config/default_settings.json"):

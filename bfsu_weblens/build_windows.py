@@ -119,7 +119,7 @@ def clean_env(*, build_python: Path | None = None) -> dict[str,str]:
 
 
 def check_host() -> None:
-    log("[1/14] Checking Windows x64 build host...")
+    log("[1/15] Checking Windows x64 build host...")
     if os.name!="nt": raise RuntimeError("Windows releases must be built on Windows.")
     if struct.calcsize("P")*8!=64: raise RuntimeError("64-bit Python is required.")
     if platform.machine().lower() not in {"amd64","x86_64","x64"}: raise RuntimeError("Windows x64 Python is required.")
@@ -132,7 +132,7 @@ def check_host() -> None:
 
 
 def clean() -> None:
-    log("[2/14] Cleaning previous build intermediates...")
+    log("[2/15] Cleaning previous build intermediates...")
     for p in [BUILD_ENV,BUILD_DIR,ROOT/'dist']:
         if p.exists(): shutil.rmtree(p,ignore_errors=False)
     for p in [SPEC_FILE,VERSION_FILE]:
@@ -152,7 +152,7 @@ def find_conda_exe() -> Path | None:
 
 
 def create_private_env() -> tuple[Path,str]:
-    log("[3/14] Creating a PRIVATE minimal build environment...")
+    log("[3/15] Creating a PRIVATE minimal build environment...")
     conda=find_conda_exe() if is_conda(SOURCE_PREFIX) else None
     if conda:
         log("  Conda bootstrap detected: creating a clean private Conda prefix (Python 3.12).")
@@ -172,7 +172,7 @@ def create_private_env() -> tuple[Path,str]:
 
 
 def install_minimal_runtime(py: Path) -> dict[str,str]:
-    log("[4/14] Installing ONLY WebLens runtime + build dependencies...")
+    log("[4/15] Installing ONLY WebLens runtime + build dependencies...")
     env=clean_env(build_python=py)
     run([py,'-m','pip','install','--upgrade','pip','setuptools','wheel'],env=env)
     run([py,'-m','pip','install','--no-cache-dir','-r',ROOT/'requirements.txt'],env=env)
@@ -181,7 +181,7 @@ def install_minimal_runtime(py: Path) -> dict[str,str]:
 
 
 def verify_runtime(py: Path, env: dict[str,str]) -> None:
-    log("[5/14] Verifying the private minimal runtime...")
+    log("[5/15] Verifying the private minimal runtime...")
     log(f"  Private Python : {py}")
     log(f"  Private PATH   : {env.get('PATH', '')}")
     if str(SOURCE_PREFIX).lower() in env.get('PATH', '').lower():
@@ -195,13 +195,13 @@ def verify_runtime(py: Path, env: dict[str,str]) -> None:
 
 
 def compile_sources(py: Path, env: dict[str,str]) -> None:
-    log("[6/14] Compiling sources and creating version metadata...")
-    run([py,'-m','compileall','-q',ROOT/'bfsu_weblens',ROOT/'main.py',ROOT/'build_probe.py'],env=env)
+    log("[6/15] Compiling sources and creating version metadata...")
+    run([py,'-m','compileall','-q',ROOT/'bfsu_weblens',ROOT/'main.py',ROOT/'build_probe.py',ROOT/'maintenance_cli.py'],env=env)
     run([py,ROOT/'build_probe.py','write-version-info',VERSION_FILE],env=env)
 
 
 def build_onedir(py: Path, env: dict[str,str]) -> None:
-    log("[7/14] Building minimal PyInstaller ONEDIR package...")
+    log("[7/15] Building minimal PyInstaller ONEDIR package...")
     e=env.copy(); e['QT_API']='PySide6'
     excludes=[
         # Other GUI stacks
@@ -219,8 +219,8 @@ def build_onedir(py: Path, env: dict[str,str]) -> None:
     ]
     args=[py,'-m','PyInstaller','--noconfirm','--clean','--onedir','--windowed','--contents-directory','_internal',
           '--name',APP_NAME,'--version-file',VERSION_FILE,'--icon',ROOT/'assets/app.ico',
-          '--add-data',f"{ROOT/'assets'};assets",'--add-data',f"{ROOT/'config'};config",'--add-data',f"{ROOT/'README.md'};.",
-          '--collect-data','newspaper','--collect-data','tldextract',
+          '--add-data',f"{ROOT/'assets'};assets",'--add-data',f"{ROOT/'config'};config",
+          '--collect-data','newspaper','--collect-data','tldextract','--collect-all','selenium',
           '--hidden-import','lxml_html_clean','--hidden-import','charset_normalizer','--hidden-import','openpyxl','--hidden-import','docx',
           '--paths',ROOT]
     for x in excludes: args += ['--exclude-module',x]
@@ -230,8 +230,25 @@ def build_onedir(py: Path, env: dict[str,str]) -> None:
         raise RuntimeError('PyInstaller did not produce the expected ONEDIR layout.')
 
 
+PACKAGED_MAINTENANCE_FILES = (
+    'README.md', 'MAINTENANCE.md',
+    'maintenance.bat', 'reset_user_settings.bat',
+    'clear_web_components.bat', 'uninstall_weblens.bat',
+)
+
+
+def install_maintenance_tools() -> None:
+    log("[8/15] Installing packaged maintenance tools...")
+    for name in PACKAGED_MAINTENANCE_FILES:
+        src = ROOT / name
+        if not src.exists():
+            raise RuntimeError(f"Missing maintenance/release file: {name}")
+        shutil.copy2(src, DIST_DIR / name)
+        log(f"  added: {name}")
+
+
 def prune_qt_payload() -> None:
-    log("[8/14] Pruning Qt payloads that WebLens does not use...")
+    log("[9/15] Pruning Qt payloads that WebLens does not use...")
     # Only remove categories that are irrelevant to a QtWidgets desktop app.
     candidates=[
         INTERNAL_DIR/'PySide6/Qt/qml',
@@ -259,7 +276,7 @@ def prune_qt_payload() -> None:
 
 
 def ensure_qwindows(py: Path, env: dict[str,str]) -> None:
-    log("[9/14] Verifying qwindows.dll...")
+    log("[10/15] Verifying qwindows.dll...")
     candidates=list(INTERNAL_DIR.rglob('qwindows.dll'))
     if candidates:
         log(f"  qwindows.dll: {candidates[0].relative_to(DIST_DIR)}")
@@ -280,8 +297,10 @@ def smoke_env() -> dict[str,str]:
 
 
 def smoke_test() -> None:
-    log("[10/14] Running frozen Qt smoke test after pruning...")
-    run([DIST_DIR/f'{APP_NAME}.exe','--qt-smoke-test'],env=smoke_env(),timeout=180)
+    log("[11/15] Running frozen Qt/Selenium/maintenance smoke tests after pruning...")
+    env = smoke_env()
+    run([DIST_DIR/f'{APP_NAME}.exe','--qt-smoke-test'],env=env,timeout=180)
+    run([DIST_DIR/f'{APP_NAME}.exe','--maintenance','self-check'],env=env,timeout=180)
 
 
 def dir_size(p: Path) -> int:
@@ -297,7 +316,7 @@ def human(n: int) -> str:
 
 
 def write_size_report() -> None:
-    log("[11/14] Writing bundle-size report...")
+    log("[12/15] Writing bundle-size report...")
     total=dir_size(DIST_DIR)
     rows=[]
     for p in INTERNAL_DIR.iterdir() if INTERNAL_DIR.exists() else []:
@@ -319,14 +338,15 @@ def write_size_report() -> None:
 
 
 def verify_layout() -> None:
-    log("[12/14] Verifying ONEDIR layout...")
+    log("[13/15] Verifying ONEDIR layout...")
     req=[DIST_DIR/f'{APP_NAME}.exe',INTERNAL_DIR,INTERNAL_DIR/'assets/app_256.png',INTERNAL_DIR/'config/default_settings.json']
+    req += [DIST_DIR/name for name in PACKAGED_MAINTENANCE_FILES]
     miss=[str(p.relative_to(ROOT)) for p in req if not p.exists()]
     if miss: raise RuntimeError('Frozen package is incomplete: '+', '.join(miss))
 
 
 def make_zip() -> None:
-    log("[13/14] Creating release ZIP...")
+    log("[14/15] Creating release ZIP...")
     RELEASE_DIR.mkdir(parents=True,exist_ok=True)
     if RELEASE_ZIP.exists(): RELEASE_ZIP.unlink()
     with zipfile.ZipFile(RELEASE_ZIP,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=9,allowZip64=True) as zf:
@@ -342,7 +362,7 @@ def make_zip() -> None:
 
 
 def finish(mode: str) -> None:
-    log("[14/14] Final cleanup...")
+    log("[15/15] Final cleanup...")
     for p in [VERSION_FILE,SPEC_FILE]:
         if p.exists(): p.unlink()
     log(''); log('='*68); log('BUILD COMPLETE - SLIM WINDOWS RELEASE')
@@ -359,7 +379,7 @@ def main() -> int:
     mode='unknown'
     try:
         check_host(); clean(); py,mode=create_private_env(); env=install_minimal_runtime(py); verify_runtime(py,env)
-        compile_sources(py,env); build_onedir(py,env); prune_qt_payload(); ensure_qwindows(py,env); smoke_test(); write_size_report(); verify_layout(); make_zip(); finish(mode)
+        compile_sources(py,env); build_onedir(py,env); install_maintenance_tools(); prune_qt_payload(); ensure_qwindows(py,env); smoke_test(); write_size_report(); verify_layout(); make_zip(); finish(mode)
         return 0
     except Exception as exc:
         log(''); log('='*68); log('BUILD FAILED'); log(f'Reason: {exc}'); log(f'Build mode: {mode}'); log(f'Build log: {LOG_FILE}'); log(f'Size report: {SIZE_REPORT}'); log('='*68)

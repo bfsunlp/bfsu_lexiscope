@@ -186,6 +186,30 @@ def cmd_runtime_check(_args: argparse.Namespace) -> int:
         except Exception as exc:
             failed = True
             print(f"ERROR {name}: {exc}", file=sys.stderr)
+
+    # Selenium's browser implementations are not adequately tested by
+    # `import selenium` alone.  These are the concrete modules used by
+    # WebLens automatic collection and Selenium content fallback.  Keep this
+    # list aligned with the frozen-app smoke test in bfsu_weblens/app.py.
+    selenium_runtime_modules = (
+        "selenium.webdriver.chrome.webdriver",
+        "selenium.webdriver.chrome.options",
+        "selenium.webdriver.chrome.service",
+        "selenium.webdriver.edge.webdriver",
+        "selenium.webdriver.edge.options",
+        "selenium.webdriver.edge.service",
+        "selenium.webdriver.common.driver_finder",
+        "selenium.webdriver.common.selenium_manager",
+        "selenium.webdriver.remote.webdriver",
+    )
+    for name in selenium_runtime_modules:
+        try:
+            importlib.import_module(name)
+            print(f"OK {name}")
+        except Exception as exc:
+            failed = True
+            print(f"ERROR {name}: {exc}", file=sys.stderr)
+
     if failed:
         return 10
     try:

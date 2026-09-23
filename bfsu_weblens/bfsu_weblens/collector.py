@@ -154,21 +154,45 @@ def quote_phrase(term: str) -> str:
     term = term.strip().strip('"')
     return f'"{term}"'
 
-def build_site_query(site_filters: list[str]) -> str:
-    cleaned = []
+def normalize_site_filters(site_filters: list[str]) -> list[str]:
+    """Normalize user-entered site/domain filters while preserving order.
+
+    Google can still combine several site filters in one query. Baidu does not
+    reliably support that OR expression, so :func:`expand_search_tasks` turns
+    multiple Baidu domains into separate concrete search tasks before
+    ``build_query`` is called.
+    """
+    cleaned: list[str] = []
+    seen: set[str] = set()
     for item in site_filters or []:
-        s = item.strip()
+        s = str(item or "").strip()
         if not s:
             continue
-        if s.startswith("site:"):
+        if s.lower().startswith("site:"):
             s = s[5:].strip()
-        s = s.replace("https://", "").replace("http://", "").strip("/")
-        if s:
-            cleaned.append(s)
+        s = re.sub(r"^https?://", "", s, flags=re.I).strip().strip("/")
+        # A domain filter is intentionally host/path text, not an arbitrary
+        # Boolean query fragment.  Remove accidental whitespace that would
+        # turn one filter into several Baidu query terms.
+        s = re.sub(r"\s+", "", s)
+        if not s:
+            continue
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(s)
+    return cleaned
+
+
+def build_site_query(site_filters: list[str]) -> str:
+    cleaned = normalize_site_filters(site_filters)
     if not cleaned:
         return ""
     if len(cleaned) == 1:
         return f"site:{cleaned[0]}"
+    # This multi-domain expression is retained for Google only. Baidu tasks
+    # are expanded to at most one domain before this function is reached.
     return " OR ".join(f"site:{s}" for s in cleaned)
 
 def build_query(query_mode: str, query_terms: list[str], raw_query: str, site_filters: list[str]) -> str:
@@ -189,7 +213,7 @@ def build_query(query_mode: str, query_terms: list[str], raw_query: str, site_fi
     else:
         q = " ".join(terms)
     site_expr = build_site_query(site_filters)
-    if site_expr and "site:" not in q:
+    if site_expr and "site:" not in q.lower():
         q = f"({q}) ({site_expr})" if (q and " OR " in site_expr) else f"{q} {site_expr}".strip()
     return q
 
@@ -301,21 +325,59 @@ def build_search_url(cfg: CollectorConfig, shard_start: date, shard_end: date) -
     return "https://www.google.com/search?" + urlencode(params)
 
 def expand_search_tasks(cfg: CollectorConfig) -> list[CollectorConfig]:
-    """Expand one user configuration into concrete search tasks.
+    """Expand one panel configuration into concrete engine search tasks.
 
-    Baidu's multiple-term mode intentionally searches each term separately
-    because Baidu no longer supports the earlier OR syntax reliably. Google
-    keeps its existing query semantics. The helper is shared by automatic and
-    manual collection so both modes generate exactly the same initial queries.
+    Google keeps its native query-composition semantics. Baidu is deliberately
+    conservative: WebLens never auto-generates ``OR`` to combine user-entered
+    terms or site/domain filters. In Baidu multiple-term mode each non-empty
+    term is searched separately, and each domain is searched separately. The
+    concrete task set is therefore:
+
+        term-task × domain-task
+
+    Date slicing remains a separate dimension handled by ``crawl()`` and by
+    manual collection. Consequently the full Baidu execution plan is:
+
+        term-task × domain-task × date-slice
+
+    The helper is shared by Automatic Collection and Manual Collection so the
+    two workflows always generate the same initial searches.
     """
-    baidu_sequential = (
-        is_baidu_vertical(getattr(cfg, "search_vertical", ""))
-        and (getattr(cfg, "query_mode", "") or "").lower().strip() == "any"
-    )
-    terms = [term.strip() for term in (getattr(cfg, "query_terms", None) or []) if term and term.strip()]
-    if baidu_sequential:
-        return [replace(cfg, query_mode="single", query_terms=[term], raw_query="") for term in terms]
-    return [cfg]
+    if not is_baidu_vertical(getattr(cfg, "search_vertical", "")):
+        return [cfg]
+
+    mode = (getattr(cfg, "query_mode", "") or "").lower().strip()
+    terms = [str(term).strip() for term in (getattr(cfg, "query_terms", None) or []) if str(term or "").strip()]
+    domains = normalize_site_filters(list(getattr(cfg, "site_filters", None) or []))
+    # In Raw query mode an explicit site: expression belongs to the user's raw
+    # syntax. Do not multiply identical tasks by also expanding the separate
+    # site/domain field, which build_query deliberately ignores in that case.
+    if mode == "raw" and "site:" in str(getattr(cfg, "raw_query", "") or "").lower():
+        domains = []
+
+    # Baidu's UI exposes ``any`` as "Multiple terms (search one by one)".
+    # ``phrase_any`` is handled too for backward compatibility with settings
+    # saved by older builds even though it is no longer offered in the Baidu UI.
+    term_cfgs: list[CollectorConfig]
+    if mode == "any":
+        term_cfgs = [replace(cfg, query_mode="single", query_terms=[term], raw_query="") for term in terms]
+    elif mode == "phrase_any":
+        term_cfgs = [replace(cfg, query_mode="phrase", query_terms=[term], raw_query="") for term in terms]
+    else:
+        term_cfgs = [cfg]
+
+    if not term_cfgs:
+        return []
+
+    # No site/domain filter means one unconstrained domain dimension.
+    if not domains:
+        return [replace(task, site_filters=[]) for task in term_cfgs]
+
+    tasks: list[CollectorConfig] = []
+    for term_task in term_cfgs:
+        for domain in domains:
+            tasks.append(replace(term_task, site_filters=[domain]))
+    return tasks
 
 
 def split_date_range(start: date, end: date, day_step: int) -> list[tuple[date, date]]:
@@ -354,8 +416,8 @@ def is_google_news_redirect_url(url: str) -> bool:
     Current Google News result pages may expose the real story through a Google
     ``/goto`` redirect whose ``url`` value is an opaque token rather than the
     destination URL.  These are *result links*, not Google interface/navigation
-    links, so they must survive collection.  Destination-page downloading will
-    follow the redirect and can then replace the stored link with the final URL.
+    links, so they must survive parsing.  Automatic collection then attempts to
+    resolve them to direct external URLs before the records reach Result Preview.
     """
     if not url:
         return False
@@ -371,6 +433,146 @@ def is_google_news_redirect_url(url: str) -> bool:
         return False
     token = parse_qs(parsed.query).get("url", [""])[0]
     return bool(token)
+
+
+def _sync_requests_session_from_browser(session, driver) -> None:
+    """Copy the live browser identity needed by Google's redirect endpoint.
+
+    Search-result pages remain browser-only.  The requests session is used only
+    to ask a Google ``/goto`` endpoint for its HTTP redirect target, with
+    redirects disabled so the destination article itself is not downloaded.
+    """
+    try:
+        user_agent = str(driver.execute_script("return navigator.userAgent || '';") or "").strip()
+        if user_agent:
+            session.headers.update({"User-Agent": user_agent})
+    except Exception:
+        pass
+    try:
+        for cookie in driver.get_cookies() or []:
+            name = str(cookie.get("name") or "").strip()
+            value = str(cookie.get("value") or "")
+            if not name:
+                continue
+            kwargs = {}
+            domain = str(cookie.get("domain") or "").strip()
+            path = str(cookie.get("path") or "/").strip() or "/"
+            if domain:
+                kwargs["domain"] = domain
+            kwargs["path"] = path
+            try:
+                session.cookies.set(name, value, **kwargs)
+            except Exception:
+                session.cookies.set(name, value)
+    except Exception:
+        pass
+
+
+def resolve_google_goto_url(
+    url: str,
+    session,
+    *,
+    referer: str = "",
+    timeout_seconds: int = 8,
+) -> str:
+    """Resolve an opaque Google News ``/goto?url=CAES...`` link cheaply.
+
+    The opaque token is not a destination URL that WebLens can safely decode
+    locally.  Google already knows the mapping, so WebLens performs a normal
+    GET to the Google redirect endpoint with ``allow_redirects=False`` and reads
+    the HTTP ``Location`` header.  It never follows the redirect to the article
+    here.  On any failure the original ``/goto`` URL is returned, preserving the
+    existing full-text-download fallback.
+    """
+    original = html_lib.unescape((url or "").strip())
+    if not is_google_news_redirect_url(original):
+        return original
+
+    current = original
+    timeout = max(2, min(int(timeout_seconds or 8), 15))
+    headers = {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
+    if referer:
+        headers["Referer"] = referer
+
+    try:
+        for _ in range(3):
+            response = session.get(
+                current,
+                headers=headers,
+                timeout=timeout,
+                allow_redirects=False,
+                stream=True,
+            )
+            try:
+                location = html_lib.unescape(str(response.headers.get("Location") or "").strip())
+            finally:
+                response.close()
+
+            if not location:
+                return original
+
+            candidate = urljoin(current, location)
+            candidate = unwrap_google_url(candidate) or candidate
+            if candidate.startswith(("http://", "https://")) and not is_google_host(candidate):
+                return candidate
+            if is_google_news_redirect_url(candidate):
+                current = candidate
+                continue
+            return original
+    except Exception:
+        return original
+
+
+def resolve_google_redirect_records(
+    records: list[SearchRecord],
+    session,
+    *,
+    referer: str,
+    timeout_seconds: int,
+    cache: dict[str, str],
+    stop_checker: Optional[Callable[[], bool]] = None,
+) -> tuple[list[SearchRecord], int, int]:
+    """Resolve unique Google ``/goto`` links in one parsed result page.
+
+    Returns ``(records, resolved_count, retained_count)``.  A short jitter is
+    inserted between Google redirect requests so this extra normalization step
+    does not burst-click an entire result page at once.
+    """
+    resolved_count = 0
+    retained_count = 0
+    goto_indexes = [i for i, rec in enumerate(records) if is_google_news_redirect_url(rec.link)]
+    if not goto_indexes:
+        return records, 0, 0
+
+    for pos, index in enumerate(goto_indexes):
+        if stop_checker and stop_checker():
+            raise StopCrawl()
+        rec = records[index]
+        original = rec.link
+        target = cache.get(original)
+        if target is None:
+            target = resolve_google_goto_url(
+                original,
+                session,
+                referer=referer,
+                timeout_seconds=timeout_seconds,
+            )
+            cache[original] = target
+        if target and target != original and target.startswith(("http://", "https://")) and not is_google_host(target):
+            rec.link = target
+            rec.actual_domain = _actual_domain(target)
+            resolved_count += 1
+        else:
+            retained_count += 1
+
+        if pos < len(goto_indexes) - 1:
+            sleep_random_ms(150, 350, stop_checker)
+
+    return records, resolved_count, retained_count
 
 
 def unwrap_google_url(href: str) -> str:
@@ -1855,10 +2057,10 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
     that link disappears or a genuine empty result page is reached. There is no
     software-side page-count ceiling.
 
-    Baidu's ``any`` query mode is deliberately different from Google's OR mode:
-    each non-empty input line becomes an independent search task. WebLens fully
-    traverses one Baidu term before moving to the next and never emits an OR
-    expression for that mode.
+    Baidu is deliberately different from Google: each term in multiple-term
+    mode and each site/domain filter becomes an independent task dimension.
+    WebLens fully traverses one concrete Baidu term/domain task before moving
+    to the next and never auto-generates OR to combine those dimensions.
     """
     fetch_backend = (getattr(cfg, "fetch_backend", "selenium_chrome") or "selenium_chrome").lower()
     if fetch_backend not in {"selenium_chrome", "selenium_edge"}:
@@ -1866,13 +2068,13 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
 
     seen_global: set[str] = set()
     driver = None
+    google_redirect_session = None
+    google_redirect_cache: dict[str, str] = {}
     backend_name = "Edge" if fetch_backend == "selenium_edge" else "Chrome"
 
-    baidu_sequential = (
-        is_baidu_vertical(getattr(cfg, "search_vertical", ""))
-        and (getattr(cfg, "query_mode", "") or "").lower().strip() == "any"
-    )
+    is_baidu = is_baidu_vertical(getattr(cfg, "search_vertical", ""))
     search_tasks = expand_search_tasks(cfg)
+    baidu_sequential = is_baidu and len(search_tasks) > 1
 
     if not search_tasks:
         yield CrawlEvent("done", "No search terms were provided.")
@@ -1884,8 +2086,16 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
     yield CrawlEvent("log", "Page size and maximum page count are controlled by the search engine. WebLens sends neither setting.")
     yield CrawlEvent("log", "Pagination follows the search engine's own Next link; WebLens does not calculate page offsets.")
     yield CrawlEvent("log", "Page, slice-transition, and transient-error waits all use the same page-delay range.")
-    if baidu_sequential:
-        yield CrawlEvent("log", f"Baidu multiple-term mode: {len(search_tasks)} term(s) will be searched one by one; no OR expression will be sent.")
+    if is_baidu:
+        term_count = len([t for t in (getattr(cfg, "query_terms", None) or []) if str(t or "").strip()])
+        domain_count = len(normalize_site_filters(list(getattr(cfg, "site_filters", None) or [])))
+        if baidu_sequential:
+            yield CrawlEvent(
+                "log",
+                f"Baidu task expansion: {len(search_tasks)} concrete term/domain task(s) will be searched sequentially; WebLens will not join multiple user terms/domains with OR."
+            )
+        elif term_count or domain_count:
+            yield CrawlEvent("log", "Baidu query uses at most one active site/domain filter per concrete search task.")
 
     def start_selenium_driver(page_number: int | None = None):
         try:
@@ -1913,6 +2123,16 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
 
         driver = start_selenium_driver(1)
         yield CrawlEvent("log", f"{backend_name} collection browser started. It will remain open for the task unless the user stops collection.")
+        if not is_baidu:
+            try:
+                import requests
+                google_redirect_session = requests.Session()
+                google_redirect_session.headers.update({
+                    "User-Agent": "Mozilla/5.0",
+                    "Connection": "keep-alive",
+                })
+            except Exception:
+                google_redirect_session = None
 
         if cfg.date_filter_enabled:
             base_date_slices = split_date_range(cfg.start_date, cfg.end_date, cfg.day_step)
@@ -1931,9 +2151,8 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                 raise StopCrawl()
             query_label = build_query(task_cfg.query_mode, task_cfg.query_terms, task_cfg.raw_query, task_cfg.site_filters)
             if baidu_sequential:
-                yield CrawlEvent("log", f"Baidu term [{query_index}/{len(search_tasks)}]: {query_label}")
+                yield CrawlEvent("log", f"Baidu search task [{query_index}/{len(search_tasks)}]: {query_label}")
 
-            terminate_current_query_after_empty = False
             for slice_index, (shard_start, shard_end) in enumerate(base_date_slices, start=1):
                 if stop_checker and stop_checker():
                     raise StopCrawl()
@@ -2013,15 +2232,33 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                                 f"Recovered {len(live_records)} Google result record(s) directly from the live browser DOM after the HTML parser returned none.",
                             )
 
+                    if page_records and not is_baidu and google_redirect_session is not None:
+                        goto_count = sum(1 for rec in page_records if is_google_news_redirect_url(rec.link))
+                        if goto_count:
+                            _sync_requests_session_from_browser(google_redirect_session, driver)
+                            page_records, resolved_count, retained_count = resolve_google_redirect_records(
+                                page_records,
+                                google_redirect_session,
+                                referer=final_url or current_url,
+                                timeout_seconds=min(max(2, int(task_cfg.timeout_seconds or 8)), 10),
+                                cache=google_redirect_cache,
+                                stop_checker=stop_checker,
+                            )
+                            yield CrawlEvent(
+                                "log",
+                                f"Google News redirect normalization on page {page_number}: "
+                                f"{resolved_count}/{goto_count} /goto link(s) converted to direct destination URLs"
+                                + (f"; {retained_count} retained as fallback because Google did not return a usable redirect target." if retained_count else "."),
+                            )
+
                     if not page_records and candidate_count == 0:
                         debug_path = save_debug_html_if_needed(task_cfg, html_text, shard_start, shard_end, page_number)
                         msg = f" Debug HTML saved to: {debug_path}." if debug_path else ""
-                        if baidu_sequential:
+                        if is_baidu:
                             yield CrawlEvent(
                                 "log",
-                                f"Result page {page_number} contains no usable search-result links. Current Baidu term is complete; continue with the next term if any.{msg}",
+                                f"Result page {page_number} contains no usable search-result links. Current Baidu search unit is complete; continue with the next date slice or term/domain task if any.{msg}",
                             )
-                            terminate_current_query_after_empty = True
                         else:
                             yield CrawlEvent(
                                 "log",
@@ -2069,7 +2306,7 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                     current_url = next_url
                     page_number += 1
 
-                if terminate_all or terminate_current_query_after_empty:
+                if terminate_all:
                     break
 
                 if slice_index < len(base_date_slices):
@@ -2080,11 +2317,16 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                 yield CrawlEvent("log", "Collection ended because the browser returned a genuine empty search-result page.")
                 break
             if baidu_sequential and query_index < len(search_tasks):
-                yield CrawlEvent("log", "Current Baidu term is complete. Waiting with the normal page-delay range before the next term.")
+                yield CrawlEvent("log", "Current Baidu term/domain task is complete. Waiting with the normal page-delay range before the next task.")
                 sleep_random_ms(task_cfg.page_delay_min_ms, task_cfg.page_delay_max_ms, stop_checker)
 
         yield CrawlEvent("done", "Crawl finished.")
     finally:
+        if google_redirect_session is not None:
+            try:
+                google_redirect_session.close()
+            except Exception:
+                pass
         if driver is not None:
             try:
                 driver.quit()

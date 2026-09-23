@@ -1,236 +1,233 @@
-# BFSU WebLens v3.1.4
+# BFSU WebLens v3.1.9
 
-**BFSU WebLens** is a web and news corpus collection tool developed by the **BFSU Corpus Research Team** as part of **BFSU LexiScope**. It integrates search-result collection, manual result-page import, URL intake, result curation, sampling, webpage downloading, metadata extraction, and corpus-oriented text preparation in one desktop application.
+**BFSU WebLens** is the web and news corpus collection component of **BFSU LexiScope**, developed by the BFSU Corpus Research Team. It is designed for corpus construction, web/news corpus collection, corpus-based discourse studies, translation and media research, and other research workflows that require traceable discovery, review, downloading and organization of web resources.
 
-WebLens is designed for corpus construction rather than general-purpose web crawling. It supports both automated and human-controlled workflows so that users can continue building corpora even when search engines require manual verification or when automated pagination is undesirable.
-
-Author: **Dr. Dingjia Liu**  
-Project: **BFSU LexiScope / BFSU Corpus Research Team**
-
----
-
-# English
-
-## 1. Download
-
-### Direct download
-
-**BFSU WebLens v3.1.4 for Windows x64**  
-https://icloud.bfsu.edu.cn/f/0caa3e3134124f098fc2/
-
-### Baidu Netdisk
-
-File: **BFSU_WebLens_v3.1.4_windows_x64.zip**  
-Link: https://pan.baidu.com/s/1diktKNs9tonYpYkfO9mzDg?pwd=si5e  
-Extraction code: **si5e**
-
-The Windows release uses an **ONEDIR** layout: `BFSU_WebLens.exe` is placed at the top level and runtime files are stored under `_internal`.
-
----
-
-## 2. Main features
-
-### 2.1 Automatic Google and Baidu collection
-
-WebLens can collect Google and Baidu search-result links through a real Chrome or Edge browser controlled by Selenium.
-
-Main controls include:
-
-- search terms and query modes;
-- Google Web / Google News;
-- Baidu Web / Baidu News-related search modes;
-- site/domain restriction;
-- language and country/region restriction where supported by the search engine;
-- optional date restriction;
-- configurable page and slice delays;
-- manual handling of human-verification pages;
-- automatic continuation after verification when a valid result page is detected.
-
-WebLens does not force a fixed search-result page size or maximum page count. Pagination follows the search engine's own rendered **Next** link.
-
-The default date-slice value for both Google and Baidu is **0**, meaning that the selected date range is submitted as one search interval. A value greater than 0 enables date slicing.
-
-### 2.2 Manual Collection
-
-Version 3.0 introduced a browser-independent **Manual Collection** workflow.
-
-WebLens can generate one or more search-engine URLs from the parameters currently entered in the Google or Baidu panel. Users can then:
-
-1. copy the generated URL(s) into any normal browser;
-2. complete verification manually if required;
-3. turn pages manually;
-4. save each search-result page as `.html` or `.htm`;
-5. batch-import the saved pages into WebLens.
-
-WebLens parses the saved Google/Baidu result pages, extracts candidate result links and available metadata, removes duplicates, and appends new records to **Result Preview**.
-
-This mode does **not** require Selenium or WebDriver and is particularly useful when search engines frequently trigger human verification.
-
-### 2.3 Paste links from text
-
-Users can paste arbitrary text containing one or more HTTP/HTTPS links directly into WebLens.
-
-Supported input can include:
-
-- plain text;
-- copied webpage text;
-- HTML fragments;
-- Markdown links;
-- multiple URLs mixed with ordinary prose.
-
-Parsed links are deduplicated and **appended** to the existing Result Preview rather than replacing current records. The operation can be repeated multiple times.
-
-### 2.4 Import existing link files
-
-WebLens can import user-created URL lists and WebLens exports.
-
-Supported formats include:
-
-- TXT;
-- CSV / TSV;
-- XLSX;
-- XML;
-- DOCX.
-
-Only a URL is required. Missing title, source, publication time, and other metadata can be supplemented later when the destination page is downloaded successfully.
-
-### 2.5 Result Preview and corpus-oriented curation
-
-Collected or imported records are displayed in **Result Preview** for review before full-text downloading.
-
-Available operations include:
-
-- open link;
-- delete selected records;
-- sorting;
-- undo / redo / reset where applicable;
-- simple random sampling;
-- systematic sampling;
-- source-stratified sampling;
-- selected/all content download;
-- export of the curated result set.
-
-This allows users to treat search-engine output as a candidate corpus pool rather than downloading every result automatically.
-
-### 2.6 Webpage content downloading
-
-After result curation, WebLens can download destination webpages and prepare corpus-ready content.
-
-The downloader supports:
-
-- HTTP/Requests downloading where appropriate;
-- Selenium fallback for pages that cannot be retrieved reliably through Requests;
-- title extraction;
-- author extraction where available;
-- publisher/source information where available;
-- publication time extraction where available;
-- final URL recovery after redirects;
-- cleaned main-text extraction;
-- metadata export for corpus management.
-
-Google News opaque redirect URLs are retained as valid search results and are replaced by the final destination URL when the target page is successfully resolved.
-
-### 2.7 Export
-
-Collected and curated records can be exported for corpus construction and further analysis. Supported output formats include common spreadsheet, text, document, and structured-data formats such as XLSX, CSV, TXT, DOCX, and XML.
-
----
-
-## 3. Browser and WebDriver management
-
-Open **Settings → Browser & Selenium** to configure the application-wide browser environment.
-
-### Chrome
-
-The recommended Chrome workflow is isolated from the user's everyday browser:
-
-- WebLens uses a portable **Chrome for Testing** copy under `tools/browser`;
-- if no portable Chrome is available, WebLens can download and extract one automatically;
-- the exact browser version is detected;
-- a matching ChromeDriver is detected or downloaded;
-- Browser/Driver compatibility is checked before collection starts.
-
-Users can explicitly choose an already installed system Chrome, but this mode is marked **Not recommended** because normal browser auto-updates can independently change the browser version.
-
-### Microsoft Edge
-
-Because Microsoft does not provide a Chrome-for-Testing-style portable Edge ZIP, WebLens uses the **system-installed Microsoft Edge** as the recommended Edge browser and prepares a compatible EdgeDriver.
-
-### One-click configuration and updates
-
-The Browser & Selenium dialog provides:
-
-- one-click Chrome/Edge configuration;
-- independent Browser detection/configuration;
-- independent WebDriver detection/update;
-- manual Browser selection;
-- manual WebDriver selection;
-- Browser/Driver compatibility testing;
-- update of the WebLens-managed portable Chrome and matching ChromeDriver.
-
-Browser and Driver versions are rechecked before automated collection starts.
-
----
-
-## 4. Human verification
-
-WebLens does not attempt to bypass search-engine verification mechanisms.
-
-When a verification page appears:
-
-1. WebLens pauses automated navigation;
-2. the user completes the verification in the visible browser;
-3. WebLens monitors the live result DOM;
-4. collection resumes only after a stable result page or explicit no-result state is detected.
-
-The Manual Collection workflow provides an alternative when users prefer to manage search, verification, and pagination entirely by themselves.
-
----
-
-## 5. Cross-platform support
-
-### Windows
-
-Windows is the primary packaged release platform. The release uses a portable **PyInstaller ONEDIR** layout.
-
-Writable program data, downloaded browser components, drivers, output, and settings are kept outside `_internal` so the application can remain portable and maintainable.
-
-### macOS
-
-The codebase and build system support:
-
-- Apple Silicon (`arm64`);
-- Intel (`x86_64`).
-
-On macOS, writable application data is stored under:
+**BFSU WebLens / 北外 WebLens 网络语料采集工具** 是 **BFSU LexiScope** 的网络语料采集组件，由北外语料库团队开发，面向网页语料库建设、新闻语料采集、语料库话语研究、翻译研究、国际传播与传媒研究等场景。软件将搜索结果发现、结果筛选与整理、链接导入导出、网页正文下载、元信息保存和语料文本准备整合为一个可追溯的工作流程。
 
 ```text
-~/Library/Application Support/BFSU WebLens
+检索设置 → Google / 百度结果采集 → 结果预览、去重与整理
+→ 排序 / 抽样 / 人工编辑 → 结果导出 → 正文下载
+→ 正文与元信息保存 → 后续语料清洗、标注与分析
 ```
 
-Build scripts are included for both Apple Silicon and Intel. Chrome for Testing / ChromeDriver selection follows the target architecture.
+---
 
-Current download links above provide the **Windows x64 release**. macOS users can build the application from source with the supplied scripts.
+## 1. Download / 下载
+
+**Current Release / 当前版本：** `BFSU WebLens v3.1.9`
+
+**Windows x64 package / Windows x64 发布包：** `BFSU_WebLens_v3.1.9_windows_x64.zip`
+
+**Direct Download / 直接下载：**  
+https://icloud.bfsu.edu.cn/f/7f517cc69a284d798057/
+
+**Baidu Netdisk / 百度网盘：**  
+https://pan.baidu.com/s/1jueUmdCS1J6yCAaro9a2uA?pwd=jxh2
+
+**Extraction Code / 提取码：** `jxh2`
+
+下载后请**完整解压 ZIP 文件**，然后从完整发布目录运行 `BFSU_WebLens.exe`。不要只单独移动 EXE 文件，否则浏览器组件、配置文件或运行依赖可能无法正常找到。
+
+After downloading, **extract the complete ZIP package** and run `BFSU_WebLens.exe` from the extracted release folder. Do not move the EXE file out of the release directory by itself.
 
 ---
 
-## 6. Interface and language
+## 2. What is new in v3.1.9 / v3.1.9 主要更新
 
-WebLens uses a PySide6 desktop interface with a restrained warm-light visual theme and Windows high-DPI support.
+### Interruption-safe saving / 中断安全保存
 
-The interface supports:
+- Google 和百度自动采集过程中，如果用户点击 **Stop / 停止采集** 或 **Stop All / 全部停止**，软件会自动把已经进入 Result Preview 的结果保存到当前设置的结果文件中；
+- 如果采集因浏览器、网络或其它异常中断，已经采集到的链接也会在任务结束前保存；
+- Worker 完全退出后还会进行一次最终检查，避免停止瞬间刚进入队列的结果丢失；
+- 如果结果状态没有变化，不会无意义地重复重写大型结果文件。
 
-- English;
-- Simplified Chinese;
-- Traditional Chinese.
+Automatic Google/Baidu collection now preserves all results already collected when the user stops a task or when collection terminates because of a browser, network or other exception. A final save check is performed after the worker has actually stopped so late queued records are not lost.
 
-A fresh installation defaults to **English**. User Guide, Parameter Guide, and About follow the current interface language.
+### Content-download persistence and resume / 正文下载保存与断点续下
+
+- 正文下载正常结束、人工停止、全部停止或异常退出时，当前下载状态会写回结果文件；
+- 已经获得的最终 URL、正文状态、词数、质量信息以及正文和 metadata 路径会尽量保留；
+- 原有的 **Content Download 断点续下功能完整保留**；
+- 成功下载的项目会逐条记录到 `content_manifest.jsonl` 并保存正文文件；
+- 再次选择同一下载目录继续任务时，只跳过已经成功且文件仍然存在的项目，未完成、失败或中途停止的项目会继续尝试。
+
+The existing content-download checkpoint mechanism is preserved. Successfully downloaded items remain recorded item by item, while unfinished, failed or stopped items can be resumed later without restarting completed downloads.
 
 ---
 
-## 7. Run from source
+## 3. Main Features / 主要功能
 
-Python 3.10+ is supported; Python 3.12 is recommended for release builds.
+### 3.1 Google and Baidu collection / Google 与百度采集
+
+- 支持 **Google Web** 与 **Google News**；
+- 支持 **百度网页、百度资讯和媒体网站资讯**；
+- Google 支持单个检索词、OR、全部词、精确短语、多个精确短语以及原始检索式等模式；
+- Google 可按语种、国家/地区、站点/域名和日期范围限定；
+- 百度的多个检索词和多个站点/域名按独立任务展开，完整任务逻辑为 **检索词 × 域名 × 日期切片**，不会自动用 OR 合并不同任务；
+- 日期限定默认关闭，仅在用户主动启用后向搜索引擎发送日期范围；
+- 不人为设置每页结果数，也不设置固定最大页数，而是跟随搜索引擎页面自身的 **Next / 下一页**；
+- 对采集结果进行全局 URL 去重。
+
+WebLens supports Google Web/News and Baidu Web/News/Media workflows. Date filtering is opt-in, and pagination follows the search engine's own rendered Next link rather than WebLens-generated page offsets.
+
+### 3.2 One-click browser setup / 一键浏览器配置
+
+自动采集使用真实 Chrome 或 Microsoft Edge 浏览器。首次使用时，如果自动采集环境尚未准备好，可直接使用主界面的：
+
+**One-click setup Chrome & Edge / 一键配置 Chrome 与 Edge**
+
+该功能会：
+
+- 为 WebLens 准备独立的 **Chrome for Testing**；
+- 自动准备与 Chrome 版本匹配的 ChromeDriver；
+- 检测 Windows 系统已经安装的 Microsoft Edge；
+- 自动准备匹配的 EdgeDriver；
+- 至少一种浏览器环境可用后自动保存可用配置。
+
+更详细的浏览器路径、Driver、页面渲染等待时间和浏览器显示方式仍可在：
+
+**Settings → Browser & Selenium / 设置 → 浏览器与 Selenium**
+
+中单独调整。
+
+Manual collection does not require Selenium or WebDriver.
+
+### 3.3 Human verification / 人工验证
+
+当 Google 或百度出现人工验证页面时，WebLens 会暂停自动导航，不强制刷新、不自动翻页，也不会在验证期间重新打开搜索页。用户可直接在浏览器窗口中完成验证；验证结束后，WebLens 等待真实搜索结果 DOM 稳定，再从当前页面继续采集。
+
+### 3.4 Google News direct URL recovery / Google News 真实链接解析
+
+当前 Google News 有时会把新闻结果写成：
+
+```text
+https://www.google.com/goto?url=CAES...
+```
+
+WebLens 会在自动采集阶段尝试向 Google 获取该跳转链接的真实目标地址，并把 Reuters、BBC、CNN 或其它来源网站的**真实外部 URL**直接保存到 Result Preview。
+
+如果某次无法取得真实目标地址，则保留原 `/goto` 链接作为安全回退；正文下载成功后仍可根据最终跳转结果再次更新为真实 URL。
+
+### 3.5 Manual Collection / 手动采集
+
+除 Selenium 自动采集外，WebLens 还支持**手动采集**：
+
+1. 在 WebLens 中填写正常的 Google 或百度检索参数；
+2. 由 WebLens 生成一个或多个初始检索链接；
+3. 用户在自己的日常浏览器中打开链接，自行处理人工验证并手动翻页；
+4. 将各页搜索结果保存为 `.html` 或 `.htm`；
+5. 在 WebLens 的 Manual Collection 窗口中批量导入；
+6. 软件自动解析结果、去重并追加到 Result Preview。
+
+该模式**不依赖 Selenium、ChromeDriver 或 EdgeDriver**，适合搜索引擎验证频繁或研究者希望完全控制翻页过程的情况。
+
+---
+
+## 4. Result Preview and result management / 结果预览与整理
+
+Google 与百度均使用独立的结果列表。Result Preview 支持：
+
+- 打开链接；
+- 删除记录；
+- 撤销、重做与恢复当前结果的原始顺序；
+- 简单随机抽样；
+- 系统抽样；
+- 按来源分层抽样；
+- 导入已有 URL；
+- 从普通文本、HTML 或 Markdown 中粘贴并抽取链接；
+- 对选中记录或全部记录执行正文下载。
+
+### Column-header sorting / 点击表头排序
+
+结果表格可直接点击表头排序：
+
+- 第一次点击按该列正序排列；
+- 再次点击同一表头切换为逆序；
+- 支持 Link、Collected time、Title、Source、Published time、Content status、Word count、Quality 等字段；
+- 空值始终排在末尾；
+- 词数和质量值按数值而不是字符串排序；
+- 表格最左侧的 `1..N` 为固定显示序号，不作为数据字段保存，也不会随记录排序而移动；
+- **Original order / 原始顺序** 可恢复当前仍保留记录的采集或导入顺序，不会把已经删除或抽样移除的记录重新加入。
+
+---
+
+## 5. Import and Export / 导入与导出
+
+### Import / 导入
+
+支持将已有 URL 列表导入 Result Preview：
+
+- TXT：每行一个 URL；
+- 无表头 XLSX：第一列为 URL；
+- 无表头 CSV：第一列为 URL；
+- CSV / TSV / 文本文件中的 URL；
+- WebLens 已导出的 XLSX、CSV、TXT、XML、DOCX；
+- 通过 **File → Download import template / 文件 → 下载导入模板** 创建的 XLSX 模板。
+
+导入时只要求 URL 存在，标题、来源和日期可以暂时为空。正文下载成功后可进一步补全部分网页元信息。
+
+### Export / 导出
+
+采集结果可导出为：
+
+- XLSX
+- CSV
+- TXT
+- DOCX
+- XML
+
+结果文件用于保存采集链接及相关检索、来源和下载状态信息，可作为网络语料库建设过程中的来源记录和数据整理表。
+
+---
+
+## 6. Content Download / 正文下载
+
+正文下载与搜索结果采集相互独立。用户可以先整理 Result Preview，再选择需要的记录下载正文。
+
+主要功能包括：
+
+- **Requests、Selenium、Mixed / 混合模式**；
+- 下载选中记录或全部记录；
+- 多线程下载；
+- 失败重试；
+- 单条任务超时；
+- 同域名访问控制；
+- 独立的 **Stop download / 停止下载**；
+- 正文文本保存；
+- 网页 metadata 保存；
+- 最终 URL 更新；
+- 缺失标题和发布时间的补充；
+- 下载状态、词数和质量信息回写；
+- `content_manifest.jsonl` 断点续下。
+
+正文下载过程中，成功项目即时写盘。即使用户中途停止或发生异常，已经完成的正文文件和 checkpoint 仍然保留，后续可继续未完成部分。
+
+---
+
+## 7. Suggested corpus workflow / 推荐语料库工作流
+
+WebLens 的定位不是单纯的网页爬虫，而是语料库建设前端的数据采集和来源整理工具。一个典型工作流可以是：
+
+```text
+BFSU WebLens
+网络 / 新闻检索 → URL 与来源信息整理 → 正文下载
+        ↓
+BFSU ClearLens
+正文清洗、编码统一、规则处理与人工复核
+        ↓
+BFSU MetadataLens
+语料库元信息规范与记录管理
+        ↓
+后续语料检索、标注、统计分析与研究
+```
+
+WebLens is intended to make web-derived corpus data more traceable and reusable by preserving the connection among queries, result URLs, source webpages, downloaded texts and metadata.
+
+---
+
+## 8. Running from source / 源码运行
+
+Python 3.10+ is recommended.
 
 ```text
 pip install -r requirements.txt
@@ -239,529 +236,109 @@ python main.py
 
 The application entry point is `main.py`.
 
----
-
-## 8. Building releases
-
-### Windows x64
-
-Run:
+### Windows build / Windows 打包
 
 ```text
 build_exe.bat
 ```
 
-The current Windows build system:
-
-- creates a private minimal build environment;
-- uses `PySide6-Essentials` rather than the full PySide6 Addons stack;
-- keeps the developer Conda environment out of the frozen runtime;
-- excludes unrelated scientific, ML, notebook, and alternate Qt stacks;
-- produces an ONEDIR package with `_internal`;
-- performs Qt runtime and frozen-application smoke tests;
-- writes build logs and a bundle-size report;
-- automatically compresses the finished application to `release/`.
-
-Typical output:
+To rebuild the isolated build environment:
 
 ```text
-dist/
-└─ BFSU_WebLens/
-   ├─ BFSU_WebLens.exe
-   └─ _internal/
-
-release/
-└─ BFSU_WebLens_v3.1.4_windows_x64.zip
+build_exe.bat --fresh
 ```
 
-### macOS Apple Silicon
-
-```text
-./build_macos_arm64.sh --fresh
-```
-
-### macOS Intel
-
-```text
-./build_macos_intel.sh --fresh
-```
-
-See `BUILDING.md` for detailed release-build notes.
+The project also contains macOS build scripts for Apple Silicon and Intel environments. Please refer to `BUILDING.md` for release-build details.
 
 ---
 
-## 9. Version history
+## 9. Maintenance / 维护
 
-### v3.1.4 — Windows clean-room build isolation
+发布包和源码包包含 WebLens 自身的维护工具，可用于：
 
-- Fixed Qt DLL contamination when the build BAT was launched from a PyCharm terminal with an activated Conda environment.
-- After the private build environment is created, Qt/Python/Conda variables from the outer environment are removed from build subprocesses.
-- Preserved the minimal Windows build strategy introduced in v3.1.3.
+- 重置用户设置；
+- 清理 WebLens 管理的便携浏览器和 WebDriver；
+- 清理 WebLens 专用缓存；
+- 执行发布版卸载辅助操作。
 
-### v3.1.3 — Slim Windows build
+这些维护操作不会删除系统安装的 Chrome 或 Microsoft Edge。用户的语料输出和正文下载目录也不会被维护工具当作浏览器组件清除。
 
-- Reworked the Windows release builder to avoid multi-gigabyte packages.
-- Removed `--system-site-packages` from the release build path.
-- Switched the GUI dependency to `PySide6-Essentials` because WebLens uses QtCore, QtGui, and QtWidgets rather than the full Addons stack.
-- Added large-module exclusions, conservative Qt payload pruning, frozen smoke tests, and `bundle_size_report.txt`.
-
-### v3.1.2 — Windows runtime selection and Qt diagnostics
-
-- Improved selection of the bootstrap Python/Conda runtime.
-- Added stronger Qt runtime probing and DLL diagnostics.
-- Improved handling of Conda-based Windows build environments.
-
-### v3.1.1 — Reworked Windows build pipeline
-
-- Moved complex Windows build logic from BAT into Python build tooling.
-- Added persistent build logs and automatic release ZIP verification.
-- Improved reproducibility of PyInstaller ONEDIR builds.
-
-### v3.1.0 — Cross-platform Windows/macOS support
-
-- Reviewed platform-dependent modules for Windows and macOS.
-- Added macOS writable application-data paths.
-- Added Apple Silicon and Intel build scripts.
-- Added architecture-aware Chrome for Testing and Driver handling.
-- Improved Qt plugin checks for Windows and macOS packaged applications.
-
-### v3.0.0 — Manual Collection
-
-- Added generation of Google/Baidu search URLs from current query parameters.
-- Added batch import of manually saved search-result HTML pages.
-- Added parsing, deduplication, and appending of imported results to Result Preview.
-- Manual Collection works without Selenium or WebDriver.
-
-### v2.5.x — Browser environment and flexible URL intake
-
-- Added paste-from-text URL extraction.
-- Added one-click Browser/WebDriver configuration and download progress.
-- Added portable-Chrome-first isolation from the user's everyday Chrome installation.
-- Added Browser/Driver version validation and collection preflight checks.
-- Added update support for WebLens-managed portable Chrome and matching ChromeDriver.
-- Changed Edge to use the system-installed browser by default because no official portable Edge ZIP equivalent is available.
-
-### v2.4.x — Verification recovery, parsing, and interface refinement
-
-- Improved recovery after Google human verification using the live browser DOM.
-- Fixed Google News result parsing for newer `YKoRaf` result structures and opaque `/goto` redirects.
-- Improved high-DPI layout, combo-box arrows, dialog sizing, and button visibility.
-- Localized User Guide, Parameter Guide, and About according to the current interface language.
+详细说明参见 `MAINTENANCE.md`。
 
 ---
 
-## 10. Project structure
+## 10. Research use and published studies / 学术使用与成果反馈
 
-```text
-BFSU_WebLens/
-├─ main.py
-├─ build_exe.bat
-├─ build_macos_arm64.sh
-├─ build_macos_intel.sh
-├─ build_macos_common.sh
-├─ build_launcher.py
-├─ build_windows.py
-├─ build_probe.py
-├─ clean_build.bat
-├─ clean_build.sh
-├─ requirements.txt
-├─ requirements-build.txt
-├─ BUILDING.md
-├─ config/
-├─ assets/
-├─ tools/
-└─ bfsu_weblens/
-   ├─ app.py
-   ├─ browser_manager.py
-   ├─ collector.py
-   ├─ content_downloader.py
-   ├─ data.py
-   ├─ exporter.py
-   ├─ importer.py
-   ├─ manual_collection.py
-   ├─ platform_paths.py
-   ├─ resources.py
-   └─ ui/
-```
+如果您使用 **BFSU WebLens** 开展了研究，并发表了论文、著作、研究报告、语料库或其它学术成果，**欢迎通过邮件联系作者告知相关成果信息**。
+
+在方便且符合作者授权、出版与链接使用要求的情况下，我们也希望将使用 BFSU WebLens 形成的相关论文和研究成果信息发布在项目介绍或项目成果页面中，作为软件实际应用案例，并方便其他研究者了解 WebLens 在语料库建设和语言研究中的使用情况。
+
+联系时可提供论文题目、作者、期刊/出版社、年份、DOI 或公开链接等基本信息。
+
+If you use **BFSU WebLens** in your research and publish an article, book, report, corpus or other academic output, you are very welcome to contact the author and let us know about the publication. Where appropriate and permitted, information about research produced with BFSU WebLens may be listed in the project description or a project publication page as examples of scholarly use.
+
+**Contact / 联系方式：** djliu@bfsu.edu.cn
 
 ---
 
-# 中文
+## 11. Notes on responsible use / 使用说明与责任提示
 
-## 1. 下载
+- WebLens 面向科研和语料库建设，不以高频、大规模自动访问为设计目标；
+- 建议使用合理的翻页等待和访问频率；
+- 出现搜索引擎人工验证时，应由用户自行完成验证，不建议尝试绕过网站访问控制；
+- 用户应自行遵守目标网站的服务条款、robots/访问政策、版权要求、隐私要求、访问频率限制及相关法律法规；
+- 自动抽取的正文、标题、发布时间及其它 metadata 可能存在误差，正式用于论文、语料库发布或统计分析前应进行必要的人工检查；
+- WebLens 不保证第三方搜索引擎和网站页面结构长期不变，搜索引擎改版可能影响部分解析功能。
 
-### 直接下载
-
-**BFSU WebLens v3.1.4 Windows x64**  
-https://icloud.bfsu.edu.cn/f/0caa3e3134124f098fc2/
-
-### 百度网盘
-
-文件：**BFSU_WebLens_v3.1.4_windows_x64.zip**  
-链接：https://pan.baidu.com/s/1diktKNs9tonYpYkfO9mzDg?pwd=si5e  
-提取码：**si5e**
-
-Windows 发布版采用 **ONEDIR** 结构：`BFSU_WebLens.exe` 位于软件目录最外层，运行依赖集中放置在 `_internal` 目录中。
+WebLens is intended for research-oriented, low-frequency and auditable collection. Users are responsible for complying with the terms, access policies, copyright requirements, privacy rules and applicable laws of the websites they access.
 
 ---
 
-## 2. 主要功能
+## 12. Project information / 项目信息
 
-### 2.1 Google 与百度自动采集
+**Project / 项目：** BFSU LexiScope  
+**Component / 工具：** BFSU WebLens  
+**Developer / 开发者：** Dr. Dingjia LIU / 刘鼎甲 博士  
+**Team / 团队：** BFSU Corpus Research Team / 北外语料库团队  
+**Contact / 联系方式：** djliu@bfsu.edu.cn  
+**BFSU Corpus Team / 北外语料库团队：** https://corpus.bfsu.edu.cn/  
+**BFSUNLP GitHub：** https://github.com/bfsunlp  
+**BFSU LexiScope：** https://github.com/bfsunlp/bfsu_lexiscope
 
-WebLens 可以通过真实的 Chrome 或 Edge 浏览器，由 Selenium 控制完成 Google 和百度搜索结果链接采集。
+OpenAI ChatGPT assisted parts of the development process, including code generation, feature iteration, testing support and documentation drafting. The overall software design, research orientation, functional decisions, testing confirmation and final responsibility remain with the developer.
 
-主要支持：
-
-- 检索词与不同检索模式；
-- Google 网页与 Google 新闻；
-- 百度网页及新闻相关检索模式；
-- 站点/域名限定；
-- 搜索引擎支持范围内的语种和国家/地区限定；
-- 可选日期范围限制；
-- 页面等待与日期切片等待；
-- 人工完成人机验证；
-- 验证通过后自动识别有效结果页并继续采集。
-
-WebLens 不强制设置每页结果数量，也不设定固定最大页数。翻页只跟随搜索引擎页面实际显示的 **下一页** 链接。
-
-Google 与百度的日期切片默认值均为 **0**，表示将整个日期范围作为一次检索区间；设置为大于 0 的数值后才启用日期分片。
-
-### 2.2 手动采集
-
-v3.0 增加了独立于 Selenium 的 **手动采集** 模式。
-
-WebLens 可以根据当前 Google 或百度面板中填写的参数生成一个或多个搜索链接。用户随后可以：
-
-1. 将生成的链接复制到任意普通浏览器；
-2. 根据需要手动完成人机验证；
-3. 手动翻页；
-4. 将每一页搜索结果保存为 `.html` 或 `.htm`；
-5. 将保存的页面批量导入 WebLens。
-
-WebLens 会解析保存的 Google/百度搜索结果页面，抽取候选链接以及页面中能够识别的标题、来源、时间、摘要等信息，与现有 **Result Preview** 结果去重后，只追加新的记录。
-
-这一模式**不需要 Selenium 或 WebDriver**，尤其适合搜索引擎频繁触发人工验证，或者用户希望完全控制检索和翻页过程的情况。
-
-### 2.3 粘贴文本自动解析链接
-
-用户可以直接向 WebLens 粘贴包含一个或多个 HTTP/HTTPS 链接的文本。
-
-支持的输入包括：
-
-- 普通文本；
-- 从网页复制的混合文字；
-- HTML 片段；
-- Markdown 链接；
-- 正文与多个 URL 混合的文本。
-
-WebLens 会自动提取并去重链接，然后**追加**到当前 Result Preview 的末尾，不覆盖已有结果。用户可以多次粘贴、多次追加。
-
-### 2.4 导入已有链接文件
-
-WebLens 可以导入用户自己制作的链接列表，也可以重新导入 WebLens 导出的结果文件。
-
-支持：
-
-- TXT；
-- CSV / TSV；
-- XLSX；
-- XML；
-- DOCX。
-
-导入时只要求 URL 必须存在。标题、来源、发布时间等字段即使为空，也可以在后续成功下载目标网页后继续补充。
-
-### 2.5 Result Preview 与语料候选集整理
-
-所有自动采集、手动采集、文本粘贴或文件导入得到的记录都会进入 **Result Preview**，供用户在下载正文前进行筛选和整理。
-
-主要操作包括：
-
-- 打开链接；
-- 删除记录；
-- 排序；
-- 在适用位置撤销、重做、重置；
-- 简单随机抽样；
-- 系统抽样；
-- 按来源分层抽样；
-- 下载所选正文或全部正文；
-- 导出整理后的结果集。
-
-因此，WebLens 将搜索引擎结果视为**语料候选池**，用户可以先整理、抽样，再决定哪些网页进入最终语料库。
-
-### 2.6 网页正文下载与元数据整理
-
-完成结果筛选后，WebLens 可以继续下载目标网页并整理语料库所需内容。
-
-正文下载支持：
-
-- 在适合的网页上使用 Requests；
-- Requests 无法可靠下载时使用 Selenium 作为后备；
-- 标题抽取；
-- 可获得时抽取作者；
-- 可获得时抽取出版机构/来源；
-- 可获得时抽取发布时间；
-- 跳转后的最终 URL 识别；
-- 网页主体正文清理；
-- 元数据导出与语料管理。
-
-对于 Google News 使用的 `/goto` 不透明跳转链接，WebLens 会先将其保留为有效搜索结果；当目标网页能够成功解析时，再用最终目标 URL 替换跳转地址。
-
-### 2.7 导出
-
-采集和整理后的结果可以导出，用于后续语料库建设和分析。支持 XLSX、CSV、TXT、DOCX、XML 等常见格式。
+Copyright © 2026 Dingjia LIU. All rights reserved.
 
 ---
 
-## 3. Browser 与 WebDriver 管理
+## 13. Recent version history / 近期版本记录
 
-通过 **Settings → Browser & Selenium / 设置 → Browser & Selenium** 可以统一配置浏览器环境。
+### v3.1.9
 
-### Chrome
+- 采集任务人工停止或异常终止时自动保存已采集结果；
+- 正文下载停止或异常时保存当前结果状态；
+- 保留并强化正文下载断点续下机制。
 
-Chrome 默认采用与用户日常浏览器相隔离的方案：
+### v3.1.8
 
-- WebLens 使用 `tools/browser` 下的便携版 **Chrome for Testing**；
-- 如果软件内部尚未准备 Chrome，可以自动下载并解压；
-- 自动读取实际浏览器版本；
-- 自动检测或下载匹配的 ChromeDriver；
-- 开始采集前再次检查 Browser 与 Driver 的兼容性。
+- 首次运行增加 Chrome 与 Edge 一键配置；
+- Result Preview 改为点击表头正序/逆序排序；
+- 移除冗余 No. 数据列，固定使用表格左侧显示序号；
+- 增加 Original order / 原始顺序恢复。
 
-用户仍然可以主动选择系统中已经安装的 Chrome，但界面会标记为 **Not recommended / 不推荐**，因为日常 Chrome 自动升级可能独立改变版本，从而影响 Driver 匹配。
+### v3.1.7
 
-### Microsoft Edge
+- 自动解析 Google News `google.* /goto?url=CAES...` 跳转地址，并在可用时直接保存真实外部 URL。
 
-微软目前没有提供与 Chrome for Testing 对等的官方便携 Edge ZIP，因此 WebLens 默认使用**系统已经安装的 Microsoft Edge**，并自动准备与之兼容的 EdgeDriver。
+### v3.1.6
 
-### 一键配置与更新
+- 百度多检索词、多域名与日期切片按独立任务展开；
+- 增加设置重置、Web 组件清理和卸载维护工具。
 
-Browser & Selenium 窗口支持：
+### v3.0.0
 
-- Chrome/Edge 一键配置；
-- 浏览器独立检测/配置；
-- WebDriver 独立检测/更新；
-- 手动选择 Browser；
-- 手动选择 WebDriver；
-- Browser/Driver 版本匹配测试；
-- 更新 WebLens 内置便携 Chrome 与相匹配的 ChromeDriver。
-
-每次自动采集开始前都会再次核对 Browser 与 Driver 版本。
+- 增加 Manual Collection / 手动采集工作流，可在普通浏览器中保存搜索结果 HTML 后批量导入，无需 Selenium。
 
 ---
 
-## 4. 人机验证
-
-WebLens 不尝试绕过搜索引擎的人机验证机制。
-
-出现验证页面时：
-
-1. WebLens 暂停自动导航；
-2. 用户在实际浏览器窗口中手动完成验证；
-3. WebLens 持续检查当前浏览器的 live DOM；
-4. 只有检测到稳定的搜索结果页或明确的无结果状态后才恢复采集。
-
-如果用户希望完全自行控制检索、验证和翻页，可以直接使用“手动采集”模式。
-
----
-
-## 5. Windows 与 macOS 支持
-
-### Windows
-
-Windows 是目前主要提供打包下载的发布平台。Windows 发布版采用便携式 **PyInstaller ONEDIR** 结构。
-
-设置、下载的浏览器组件、Driver、输出文件等可写内容不会塞进 `_internal`，便于软件维护和升级。
-
-### macOS
-
-当前代码与构建系统同时支持：
-
-- Apple Silicon (`arm64`)；
-- Intel (`x86_64`)。
-
-macOS 上的可写程序数据统一放在：
-
-```text
-~/Library/Application Support/BFSU WebLens
-```
-
-项目中提供 Apple Silicon 和 Intel 的独立构建脚本，Chrome for Testing / ChromeDriver 也会根据目标架构选择相应版本。
-
-本 README 上方的公开下载链接目前提供的是 **Windows x64 发布版**；macOS 用户可以使用项目自带脚本从源码构建。
-
----
-
-## 6. 界面与语言
-
-WebLens 使用 PySide6 桌面界面，采用简洁的暖色浅色主题，并针对 Windows 高 DPI 缩放进行了适配。
-
-界面支持：
-
-- English；
-- 简体中文；
-- 繁體中文。
-
-首次安装默认使用 **English**。User Guide、Parameter Guide 和 About 会跟随当前界面语言显示。
-
----
-
-## 7. 从源码运行
-
-支持 Python 3.10+；发布打包推荐 Python 3.12。
-
-```text
-pip install -r requirements.txt
-python main.py
-```
-
-程序入口为 `main.py`。
-
----
-
-## 8. 发布打包
-
-### Windows x64
-
-运行：
-
-```text
-build_exe.bat
-```
-
-当前 Windows 构建系统会：
-
-- 创建独立、最小化的构建环境；
-- 使用 `PySide6-Essentials`，避免打入不需要的完整 Qt Addons；
-- 隔离开发环境中的 Conda / Qt DLL；
-- 排除无关的科学计算、机器学习、Notebook 和其他 Qt 绑定；
-- 使用 ONEDIR + `_internal` 结构；
-- 执行 Qt Runtime 和冻结程序 smoke test；
-- 自动生成构建日志和体积报告；
-- 自动将最终软件压缩到 `release/` 目录。
-
-典型输出：
-
-```text
-dist/
-└─ BFSU_WebLens/
-   ├─ BFSU_WebLens.exe
-   └─ _internal/
-
-release/
-└─ BFSU_WebLens_v3.1.4_windows_x64.zip
-```
-
-### macOS Apple Silicon
-
-```text
-./build_macos_arm64.sh --fresh
-```
-
-### macOS Intel
-
-```text
-./build_macos_intel.sh --fresh
-```
-
-更详细的构建说明见 `BUILDING.md`。
-
----
-
-## 9. 版本修订历史
-
-### v3.1.4 — Windows clean-room 构建隔离
-
-- 修复在 PyCharm Terminal 中已激活 Conda 环境时，外层 Qt DLL 污染私有构建环境的问题。
-- 私有构建环境创建完成后，后续 PyInstaller、Qt 检查和冻结程序测试不再继承外层 Conda/Python/Qt 环境变量。
-- 保留 v3.1.3 的最小化打包策略。
-
-### v3.1.3 — Windows Slim Build
-
-- 重构 Windows 打包体系，解决发布包体积达到数 GB 的问题。
-- 发布构建不再使用 `--system-site-packages`。
-- GUI 依赖改用 `PySide6-Essentials`，因为 WebLens 主要使用 QtCore、QtGui、QtWidgets。
-- 增加大型无关模块排除、Qt 安全裁剪、冻结程序 smoke test 和 `bundle_size_report.txt`。
-
-### v3.1.2 — Windows Runtime 选择与 Qt 诊断
-
-- 改进 Windows 打包时对 Python/Conda Runtime 的选择。
-- 加强 Qt Runtime 探测和 DLL 诊断信息。
-- 改进 Conda 环境下的构建兼容性。
-
-### v3.1.1 — Windows 打包流程重构
-
-- 将复杂的 Windows 构建逻辑从 BAT 转移到 Python 构建工具中。
-- 增加完整构建日志和 release ZIP 自动校验。
-- 提高 PyInstaller ONEDIR 构建的可重复性。
-
-### v3.1.0 — Windows/macOS 跨平台支持
-
-- 系统审查 Windows 与 macOS 的平台相关模块。
-- 增加 macOS 可写程序目录管理。
-- 增加 Apple Silicon 和 Intel 两套构建脚本。
-- 增加按架构选择 Chrome for Testing 和 Driver 的逻辑。
-- 加强 Windows/macOS 打包后的 Qt 插件检查。
-
-### v3.0.0 — 手动采集
-
-- 根据当前 Google/百度检索参数生成一个或多个搜索链接。
-- 支持批量导入用户手动保存的搜索结果 HTML。
-- 自动解析、去重并将结果追加到 Result Preview。
-- 手动采集无需 Selenium 或 WebDriver。
-
-### v2.5.x — 浏览器环境与灵活链接导入
-
-- 增加“粘贴文本解析链接”。
-- 增加 Browser/WebDriver 一键配置和下载进度。
-- Chrome 默认改为 WebLens 管理的便携版本，减少对用户日常浏览器的影响。
-- 增加 Browser/Driver 版本匹配和采集前预检。
-- 支持更新 WebLens 内置便携 Chrome 和匹配的 ChromeDriver。
-- Edge 因无官方便携 ZIP，改为默认使用系统已安装的 Edge。
-
-### v2.4.x — 人机验证恢复、结果解析与界面优化
-
-- 加强 Google 人机验证后的 live DOM 恢复逻辑。
-- 修复新版 Google News `YKoRaf` 结果结构及 `/goto` 跳转链接解析。
-- 优化高 DPI 下的窗口尺寸、下拉箭头、按钮显示和布局密度。
-- User Guide、Parameter Guide、About 改为跟随当前界面语言。
-
----
-
-## 10. 项目结构
-
-```text
-BFSU_WebLens/
-├─ main.py
-├─ build_exe.bat
-├─ build_macos_arm64.sh
-├─ build_macos_intel.sh
-├─ build_macos_common.sh
-├─ build_launcher.py
-├─ build_windows.py
-├─ build_probe.py
-├─ clean_build.bat
-├─ clean_build.sh
-├─ requirements.txt
-├─ requirements-build.txt
-├─ BUILDING.md
-├─ config/
-├─ assets/
-├─ tools/
-└─ bfsu_weblens/
-   ├─ app.py
-   ├─ browser_manager.py
-   ├─ collector.py
-   ├─ content_downloader.py
-   ├─ data.py
-   ├─ exporter.py
-   ├─ importer.py
-   ├─ manual_collection.py
-   ├─ platform_paths.py
-   ├─ resources.py
-   └─ ui/
-```
-
----
-
-**BFSU Corpus Research Team / 北外语料库团队**  
-**BFSU LexiScope — Corpus construction and linguistic data tools**
+**BFSU Corpus Research Team / 北外语料库团队**

@@ -1,20 +1,24 @@
-# BFSU WebLens 3.1.4 release builds
+# BFSU WebLens 3.1.6 release builds
 
 BFSU WebLens release builds must be created on the target operating system. Windows packages are built on Windows; macOS packages are built on macOS.
+
+## Selenium packaging validation
+
+The release build explicitly collects the complete `selenium` package. This is intentional: Selenium exposes concrete Chrome/Edge WebDriver implementations and Selenium Manager resources that may otherwise be missed by static PyInstaller analysis. `build_probe.py runtime-check` and the frozen `--qt-smoke-test` both import the concrete modules used by WebLens (`selenium.webdriver.chrome.webdriver`, Edge equivalents, driver finder, Selenium Manager, and remote WebDriver). A release is rejected if any of them is missing.
 
 ## Windows x64
 
 Run `build_exe.bat` from the project directory. The BAT file is deliberately small and BOM-free; it starts `build_launcher.py`, which chooses a safe build Python before the real build begins.
 
-The launcher prefers, in order: an explicit `BFSU_WEBLENS_PYTHON`, the active `VIRTUAL_ENV`, the active `CONDA_PREFIX`, a nearby project/Conda environment (including the normal BFSU LexiScope layout), discovered Conda environments, Python 3.12/3.11 from the Windows Python launcher, then the bootstrap/PATH Python. Every candidate is probed for 64-bit Windows compatibility and for the complete WebLens/PySide6 runtime.
+The launcher prefers, in order: an explicit `BFSU_WEBLENS_PYTHON`, the active `VIRTUAL_ENV`, the active `CONDA_PREFIX`, a nearby BFSU LexiScope environment, and finally the Python that launched the build. The selected interpreter is only a **bootstrap**. It is checked for Windows x64 and a supported Python version; its installed scientific/Qt packages are not exposed to PyInstaller.
 
-### Why v3.1.4 changed the strategy
+### Why v3.1.6 uses a private minimal runtime
 
-A real v3.1.1 build showed that Anaconda Base Python 3.13 could create `.venv_build_windows` and install PySide6 6.11, but `from PySide6.QtCore import ...` failed with `DLL load failed ... The specified procedure could not be found`. This is a native DLL/runtime conflict, not a missing Python package and not a PyInstaller failure. Therefore v3.1.4 no longer installs a second PySide6/Qt runtime on top of a bare Conda interpreter.
+Earlier builds showed two opposite failure modes: reusing a large Conda environment made the release grow to several gigabytes, while creating a normal venv from an activated Conda environment could let the outer Conda Qt DLLs leak into the private PySide6 runtime. The current builder therefore creates a clean runtime that owns its native dependencies and then runs every probe/PyInstaller subprocess with the outer Conda/Qt/Python environment removed.
 
-If the selected source environment already runs all WebLens dependencies and Qt correctly, the private build venv is created with `--system-site-packages`; PySide6/Qt are reused read-only from that verified environment and only `requirements-build.txt` is installed in the build venv. This is the preferred Conda mode and mirrors the successful BFSU EditTrac packaging strategy.
+If the bootstrap interpreter belongs to Conda, the builder uses Conda only to create a fresh private prefix at `.venv_build_windows` with Python 3.12 and pip. If the bootstrap interpreter is standard CPython/venv, the builder creates a normal isolated `venv`. **Neither mode uses `--system-site-packages`.** Both then install only `requirements.txt` and `requirements-build.txt`. `requirements.txt` uses `PySide6-Essentials`, while PyInstaller explicitly excludes unrelated scientific, ML, notebook and alternate-Qt stacks.
 
-If the source runtime is incomplete, a fully isolated installation is allowed only when the source is a non-Conda CPython/venv 3.10–3.12. A bare Conda environment with a failing Qt runtime is intentionally rejected instead of spending time downloading a second Qt that may not load. Python 3.13 is accepted for Windows packaging only when its existing WebLens/PySide6 runtime already passes the probe.
+This keeps the release small while still collecting the complete Selenium runtime with `--collect-all selenium`; build-time and frozen smoke tests import the concrete Chrome/Edge WebDriver modules before a release ZIP is accepted.
 
 The release remains PyInstaller ONEDIR:
 
@@ -71,7 +75,7 @@ The release is:
 
 `release/BFSU_WebLens_v<version>_macos_x86_64.zip`
 
-Both macOS scripts choose Python in this order: `BFSU_WEBLENS_PYTHON`, active `VIRTUAL_ENV`, active `CONDA_PREFIX`, `python3`, then `python`. They create architecture-specific isolated build venvs, generate a native `.icns`, build a windowed `.app`, verify the Cocoa Qt platform plugin, ad-hoc sign the app, run a frozen smoke test in a clean environment, and preserve macOS metadata when creating the ZIP with `ditto`.
+Both macOS scripts choose Python in this order: `BFSU_WEBLENS_PYTHON`, active `VIRTUAL_ENV`, active `CONDA_PREFIX`, `python3`, then `python`. They create architecture-specific isolated build venvs, install only the WebLens runtime/build requirements, generate a native `.icns`, and build a windowed `.app` with `PySide6-Essentials` plus complete Selenium collection. After PyInstaller finishes, unused Qt QML/translations/plugin payloads are conservatively pruned, the Cocoa platform plugin is verified, the app is ad-hoc signed, and frozen Qt/Selenium/maintenance smoke tests run with outer Conda/venv/Python/Qt/DYLD variables removed. A per-architecture bundle-size report is written to `build_logs/bundle_size_report_macos_<arch>.txt`, and `ditto` is used to preserve macOS metadata when creating the ZIP.
 
 `clean_build.sh` deletes build intermediates but keeps `release/`.
 
@@ -91,7 +95,7 @@ This keeps runtime data outside the application bundle and avoids invalidating t
 
 The supplied scripts use ad-hoc signing so the local `.app` bundle has a coherent signature after PyInstaller packaging. Ad-hoc signing is not Apple notarization. For broad public distribution without Gatekeeper warnings, sign the final app with an Apple Developer ID Application certificate and submit it for Apple notarization before creating the release ZIP.
 
-## Windows slim build (v3.1.4)
+## Windows slim build (v3.1.6)
 
 The Windows release builder now uses a private minimal build environment and never exposes the whole development Conda environment through `--system-site-packages`. WebLens installs `PySide6-Essentials` rather than the full `PySide6`/Addons stack because the application uses only QtCore, QtGui and QtWidgets.
 
@@ -102,4 +106,13 @@ PyInstaller explicitly excludes unrelated scientific, ML, notebook and alternate
 
 ## Windows builds launched from an activated Conda terminal
 
-It is safe to run `build_exe.bat` from a PyCharm terminal that already has a Conda environment activated. The activated environment is used only as the bootstrap interpreter. After the private build environment is created, WebLens removes `CONDA_*`, `VIRTUAL_ENV`, `QT_*`, `PYTHON*`, and `BFSU_WEBLENS_BASE_PREFIX` from child processes and replaces `PATH` with the private build prefix plus Windows system directories. The private Qt runtime therefore cannot accidentally load `Qt6Core.dll` from the outer Conda environment.
+It is safe to run `build_exe.bat` from a PyCharm terminal that already has a Conda environment activated. The activated environment is used only as the bootstrap interpreter and, when applicable, to locate the Conda executable that creates the new private prefix. After the private build environment is created, WebLens removes `CONDA_*`, `VIRTUAL_ENV`, `QT_*`, `PYTHON*`, and `BFSU_WEBLENS_BASE_PREFIX` from child processes and replaces `PATH` with the private build prefix plus Windows system directories. The private Qt runtime therefore cannot accidentally load `Qt6Core.dll` from the outer Conda environment.
+
+## Release maintenance files
+
+Windows `onedir` builds copy `README.md`, `MAINTENANCE.md`, `maintenance.bat`, `reset_user_settings.bat`, `clear_web_components.bat`, and `uninstall_weblens.bat` beside `BFSU_WebLens.exe`. The frozen smoke test also runs `BFSU_WebLens.exe --maintenance self-check`, so a package missing the maintenance module cannot pass release validation.
+
+macOS builds create a release staging folder containing `BFSU_WebLens.app` plus `reset_user_settings.command`, `clear_web_components.command`, `uninstall_weblens.command`, `maintenance_macos.sh`, `README.md`, and `MAINTENANCE.md`. Both Intel and Apple Silicon builds continue to use the same minimal runtime requirements and `--collect-all selenium` so Selenium remains complete without reintroducing unrelated scientific/ML packages.
+
+Windows `onedir` 发布目录会把维护脚本直接放在 `BFSU_WebLens.exe` 同级，并在 frozen smoke test 中额外执行维护模块自检。macOS Intel 与 Apple Silicon 发布 ZIP 则包含 `.app` 和对应 `.command` 维护脚本。三套构建都继续使用最小运行依赖与完整 Selenium 收集策略。
+
