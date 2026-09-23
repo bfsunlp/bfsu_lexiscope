@@ -2,14 +2,14 @@
 
 **BFSU LexiScope** is a series of intelligent data processing and data analysis tools for corpus-based linguistic research, corpus construction, translation studies, language education research, and digital humanities.
 
-**BFSU LexiScope / 北外 LexiScope** 是一套面向语料库研究的智能数据处理与数据分析系列工具，旨在为语料库建设、元信息整理、OCR 文本数字化、多语文本对齐、语料清洗、人工智能辅助校对、数据导入导出和后续统计分析提供统一、轻量、可扩展的桌面工具生态。
+**BFSU LexiScope / 北外 LexiScope** 是一套面向语料库研究的智能数据处理与数据分析系列工具，旨在为语料库建设、元信息整理、OCR 文本数字化、多语文本对齐、网络语料采集、语料清洗、人工智能辅助校对、数据导入导出和后续统计分析提供统一、轻量、可扩展的桌面工具生态。
 
-当前已发布的核心工具包括： 
- 
+当前已发布的核心工具包括：
+
 - **BFSU MetadataLens / 元信息规范设计与管理工具**
 - **BFSU ProofLens / OCR 识别与校对工具**
 - **BFSU AlignLens / 多语翻译对齐工具**
-- **BFSU WebLens / 网络语料检索与网页下载工具**
+- **BFSU WebLens / 网络语料检索、采集与网页下载工具**
 - **BFSU ClearLens / BFSU 文本整理器**
 
 更多面向语料库采集、数据处理、统计分析、可视化和智能标注的模块正在规划和开发中，敬请期待。
@@ -32,7 +32,7 @@ BFSU LexiScope 致力于为语言学、翻译学和语料库研究提供一套�
 核心目标包括：
 
 - 降低语料库建设中的重复性劳动；
-- 提高文本数字化、元信息整理、多语文本对齐和语料清洗效率；
+- 提高网络语料采集、文本数字化、元信息整理、多语文本对齐和语料清洗效率；
 - 支持大模型辅助的数据处理与人工复核；
 - 提供适合语言学研究者使用的图形界面；
 - 保持数据格式透明、可导出、可复用；
@@ -174,94 +174,94 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 
 **Extraction Code / 提取码：** `ihjx`
 
+---
 
-### 1.4 BFSU WebLens v3.1.4 / 网络语料检索、手动采集与网页下载工具
+### 1.4 BFSU WebLens v3.1.9 / 网络语料检索、采集与网页下载工具
 
-**BFSU WebLens v3.1.4** is a corpus-oriented web and news collection tool for corpus construction, web discourse research, translation studies, media studies, and multilingual data preparation. It integrates automatic search collection, manual search-page collection, link import, result review, sampling, source-page downloading, metadata extraction, and multilingual clean-text output in a single desktop workflow. WebLens supports both Google and Baidu, while keeping search discovery, result management, and content downloading logically separated.
+**BFSU WebLens v3.1.9** is the web and news corpus collection component of BFSU LexiScope. It integrates search-result discovery, review and organization, link import/export, source-page downloading, metadata preservation and corpus-text preparation into one traceable workflow. It supports Google Web, Google News, Baidu Web and Baidu News/Media workflows, together with automatic Selenium collection and a Selenium-free manual collection mode.
 
-**BFSU WebLens v3.1.4 / 网络语料检索、手动采集与网页下载工具** 面向网络语料库建设、新闻语料采集、语料库话语研究、国际传播研究、翻译研究和多语种网络数据准备，将搜索结果发现、手动搜索页采集、链接导入、结果整理、抽样、网页正文下载、元信息提取和多语种正文保存整合为统一工作流。软件支持 Google 与百度，并将“搜索结果采集”“结果管理”和“正文下载”相互分离，便于研究者控制采集过程并保留检索依据。
-
-其核心工作流为：
+**BFSU WebLens v3.1.9 / 网络语料检索、采集与网页下载工具** 面向网页语料库建设、新闻语料采集、语料库话语研究、翻译研究、国际传播与传媒研究等场景，将搜索结果发现、结果筛选与整理、链接导入导出、网页正文下载、元信息保存和语料文本准备整合为一个可追溯的工作流程。其核心工作流为：
 
 ```text
-检索参数设置
-→ 自动采集 或 手动生成搜索链接并保存搜索结果 HTML
-→ 导入并解析搜索结果页
-→ Result Preview 去重、排序、抽样与人工编辑
-→ 正文下载与最终 URL 解析
-→ 正文清洗、元信息补全
-→ TXT / XLSX / CSV / DOCX / XML 等格式导出
+检索设置 → Google / 百度结果采集 → 结果预览、去重与整理
+→ 排序 / 抽样 / 人工编辑 → 结果导出 → 正文下载
+→ 正文与元信息保存 → 后续语料清洗、标注与分析
 ```
 
-#### Main Features / 主要功能
+#### Search and Collection / 检索与采集
 
-- 支持 **Google Web、Google News、百度网页、百度资讯/新闻** 等检索场景；
-- 支持关键词、精确短语、OR、原始检索式、站点/域名、语种、国家/地区、日期范围等检索条件；
-- Google 与百度的日期切片默认值均为 `0`，表示不切片；用户需要时可按指定天数拆分日期范围；
-- 自动采集模式通过 Chrome 或 Edge 浏览器执行，并在开始采集前检查 Browser 与 WebDriver 的实际版本及兼容性；
-- Chrome 默认采用 **WebLens 内置便携版 Chrome for Testing**，与用户日常 Chrome 环境隔离；Microsoft Edge 默认使用系统安装版本；
-- Browser & Selenium 设置支持浏览器检测、便携 Chrome 下载与更新、Driver 检测/更新、手动路径选择、版本匹配校验和配置进度显示；
-- 支持用户主动更新 WebLens 内置便携 Chrome 及其匹配 WebDriver；
-- 当 Google 或百度出现人工验证时，自动采集可以暂停导航，让用户在当前浏览器窗口中手动完成验证，再继续采集；
-- 新增 **Manual Collection / 手动采集**：根据当前 Google 或百度检索参数生成一个或多个搜索引擎 URL，用户可在普通浏览器中手动搜索、翻页并保存结果页 HTML，再由 WebLens 批量导入和解析其中的真实结果链接；
-- 手动采集支持批量导入 `.html/.htm` 文件或整个文件夹中的保存页，并自动追加到现有 Result Preview，不覆盖已有结果；
-- 支持 **Paste links from text / 从文本粘贴链接**：用户可一次或多次粘贴包含一个或多个 `http://` / `https://` 链接的普通文本、Markdown 或 HTML，软件自动提取、去重并追加到结果列表；
-- 支持导入已有链接文件，并将导入结果直接用于后续正文下载；
-- Result Preview 支持去重、删除、排序、撤销、重做、重置、简单随机抽样、系统抽样和按来源分层抽样；
-- 支持 XLSX、CSV、TXT、DOCX 和 XML 等结果导出；
-- 正文下载支持浏览器后端、并发控制、停止、重试、断点续传、最终跳转 URL 更新和下载进度显示；
-- 对 Google News 当前使用的 `/goto` 跳转结果进行识别，并在正文下载成功后用最终目标 URL 更新记录；
-- 支持网页标题、来源、发布时间、作者、机构、地点、摘要、原始搜索 URL、检索词、搜索引擎、日期范围等语料库建设相关元信息；
-- 多语种正文抽取采用分层降级策略，并支持编码检测、乱码修复、正文候选区识别、可见文本抽取和 clean TXT 输出；
-- 英文、简体中文、繁体中文界面可切换；User Guide、Parameter Guide 和 About 随当前界面语言切换；
-- 支持 Windows 11 高 DPI 缩放；
-- 源码层面已加强 **Windows 与 macOS** 兼容，提供 Windows x64、macOS Apple Silicon 和 macOS Intel 的构建脚本；
-- Windows 发布版采用 PyInstaller `onedir` 结构，主程序位于外层，运行依赖位于 `_internal`，并使用独立最小构建环境控制发布包体积。
+- 支持 **Google Web** 与 **Google News**；
+- 支持 **百度网页、百度资讯和媒体网站资讯**；
+- Google 支持单个检索词、OR、全部词、精确短语、多个精确短语以及原始检索式等模式；
+- Google 可按语种、国家/地区、站点/域名和日期范围限定；
+- 百度多个检索词和多个站点/域名按独立任务展开，任务逻辑为 **检索词 × 域名 × 日期切片**；
+- 日期限定默认关闭，仅在用户主动启用后向搜索引擎发送日期范围；
+- 自动翻页跟随搜索引擎页面自身的 **Next / 下一页**；
+- 支持连续无新增结果自动停止，并对结果进行全局 URL 去重；
+- 当 Google 或百度出现人工验证页面时，WebLens 会暂停自动导航并允许用户直接在浏览器中完成验证，验证结束后再继续采集；
+- Google News 若返回 `google.* /goto?url=CAES...` 跳转链接，WebLens 会在可用时解析并直接保存真实外部 URL；解析失败时保留原跳转链接作为安全回退。
 
 #### Automatic and Manual Collection / 自动与手动采集
 
-WebLens v3.x provides two parallel collection routes:
+- 自动采集支持 Selenium Chrome 与 Selenium Edge；
+- 首次运行可使用 **One-click setup Chrome & Edge / 一键配置 Chrome 与 Edge** 自动准备 Chrome for Testing、ChromeDriver，并检测系统 Edge、准备匹配的 EdgeDriver；
+- 高级浏览器路径、Driver 和渲染等待参数仍可在 **Settings → Browser & Selenium / 设置 → 浏览器与 Selenium** 中调整；
+- 支持 **Manual Collection / 手动采集**：用户可在自己的日常浏览器中打开由 WebLens 生成的检索链接，自行完成验证和翻页，将搜索结果页保存为 HTML，再批量导入 WebLens；
+- 手动采集不依赖 Selenium、ChromeDriver 或 EdgeDriver，适合搜索引擎验证频繁或研究者希望完全控制翻页过程的情况。
 
-```text
-Automatic Collection
-WebLens → Browser/Selenium → Google/Baidu → automatic pagination
-→ Result Preview → content download
-```
+#### Result Management and Export / 结果管理与导出
 
-```text
-Manual Collection
-WebLens → generate search URLs → user searches in a normal browser
-→ manually page and save result HTML
-→ WebLens imports/parses saved HTML
-→ Result Preview → content download
-```
+- Google 与百度均使用独立 Result Preview；
+- 支持链接打开、删除、撤销、重做、恢复当前结果原始顺序；
+- 支持简单随机抽样、系统抽样和按来源分层抽样；
+- 支持导入已有 URL，也可从普通文本、HTML 或 Markdown 中抽取链接；
+- 结果表格可直接点击表头排序：第一次点击正序，再次点击同一表头切换为逆序；
+- 支持 Link、Collected time、Title、Source、Published time、Content status、Word count、Quality 等字段排序；
+- 空值始终排在末尾，词数和质量值按数值排序；
+- 表格最左侧 `1..N` 为显示序号，不作为数据字段保存，排序时始终保持连续显示；
+- 支持导出 XLSX、CSV、TXT、DOCX 和 XML；
+- 元信息尽量保存查询词、标题、URL、摘要、来源域名、作者、出版机构、地点、发布时间、抓取时间、日期切片、搜索引擎和正文下载状态等信息。
 
-手动模式不依赖 Selenium 环境，因此即使自动模式因人机验证、浏览器环境或 Driver 问题暂时无法工作，用户仍可使用相同检索参数生成搜索链接，并通过保存搜索结果 HTML 完成结果采集。
+#### Interruption-safe saving / 中断安全保存
+
+- Google 和百度自动采集过程中，如果用户点击 **Stop / 停止采集** 或 **Stop All / 全部停止**，已经进入 Result Preview 的结果会自动保存到当前结果文件；
+- 如果采集因浏览器、网络或其它异常中断，已采集链接也会在任务结束前保存；
+- Worker 完全退出后会再执行一次最终保存检查，降低停止瞬间尾部记录丢失的风险；
+- 如果结果状态没有变化，不会无意义地重复重写大型结果文件。
+
+#### Content Download and Text Extraction / 正文下载与文本抽取
+
+- 正文下载模式支持 **Requests、Selenium、Mixed / 混合模式**；
+- 支持下载选中记录或全部记录、多线程、失败重试、单条任务超时、同域名访问控制和独立停止下载；
+- 支持正文文本、原始页面、metadata、最终 URL、缺失标题与发布时间等信息保存或补充；
+- 正文下载正常结束、人工停止、全部停止或异常退出时，当前下载状态会写回结果文件；
+- 成功项目即时写盘，并逐条记录到 `content_manifest.jsonl`；
+- **正文下载断点续下功能完整保留**：再次使用同一下载目录继续任务时，只跳过已经成功且文件实际存在的项目，未完成、失败或中途停止的项目会继续尝试；
+- 多语种正文抽取采用分层降级策略，包括原始字节保存、编码自动检测、乱码修复、`newspaper3k`、站点模板、`article/main/content` 候选区、可见文本抽取和 clean TXT 输出；
+- 下载结果可继续进入 BFSU ClearLens、BFSU MetadataLens 或其它语料库处理流程。
 
 #### Download / 下载
 
-**Current Release / 当前版本：** `BFSU WebLens v3.1.4`
+**Current Release / 当前版本：** `BFSU WebLens v3.1.9`
 
-**File / 文件名：** `BFSU_WebLens_v3.1.4_windows_x64.zip`
+**Windows x64 package / Windows x64 发布包：** `BFSU_WebLens_v3.1.9_windows_x64.zip`
 
 **Direct Download / 直接下载：**  
-https://icloud.bfsu.edu.cn/f/0caa3e3134124f098fc2/
+https://icloud.bfsu.edu.cn/f/7f517cc69a284d798057/
 
 **Baidu Netdisk / 百度网盘：**  
-https://pan.baidu.com/s/1diktKNs9tonYpYkfO9mzDg?pwd=si5e
+https://pan.baidu.com/s/1jueUmdCS1J6yCAaro9a2uA?pwd=jxh2
 
-**Extraction Code / 提取码：** `si5e`
+**Extraction Code / 提取码：** `jxh2`
 
 #### Notes / 使用提示
 
-- 当前公开下载包为 **Windows x64** 版；
-- 下载后请完整解压整个发布目录，不要只单独移动 `BFSU_WebLens.exe`；
-- Windows 发布版采用 `onedir` 结构，主程序位于外层，Python、Qt 和其他运行依赖位于 `_internal`；
-- Chrome 自动采集默认使用 WebLens 管理的便携 Chrome，以尽量避免影响用户已有浏览器环境；
-- Microsoft Edge 默认使用系统安装版，并在采集前检查 Edge 与 EdgeDriver 版本匹配；
-- macOS Apple Silicon 和 Intel 已提供源码构建脚本，具体构建方式请参阅 WebLens 目录中的独立 README 与 BUILDING 文档；
-- 自动采集和手动采集均应遵守目标网站的服务条款、访问政策、版权、隐私和相关法律法规；
-- WebLens 面向科研和语料库建设场景，不建议用于高频、无控制的大规模自动访问。
+- 下载后请完整解压 ZIP 文件，然后从完整发布目录运行 `BFSU_WebLens.exe`，不要只单独移动 EXE 文件；
+- 自动采集首次使用时可直接使用“一键配置 Chrome 与 Edge”；
+- 如果不希望使用 Selenium，可使用 Manual Collection / 手动采集模式；
+- WebLens 面向合法、低频、研究导向的网页发现、语料采集和正文准备；
+- 用户应自行遵守目标网站的服务条款、robots/访问政策、版权、隐私、访问频率限制以及相关法律法规；
+- 自动抽取的正文、标题、发布时间及其它 metadata 可能存在误差，正式用于论文、语料库发布或统计分析前应进行必要的人工检查。
 
 ---
 
@@ -385,7 +385,7 @@ Planned functions include:
 A typical BFSU LexiScope workflow may look like this:
 
 ```text
-1. Use BFSU WebLens to discover web/news URLs through automatic or manual collection, import saved search-result pages or pasted links, download source pages, extract multilingual text, and export search/download metadata.
+1. Use BFSU WebLens to discover and collect web/news URLs, preserve source information, download multilingual web texts, and export search/download metadata.
 2. Use BFSU ProofLens to convert scanned PDFs or images into editable text and review OCR output.
 3. Import web, OCR, converted, or transcribed text into BFSU ClearLens for deterministic cleaning, regular-expression processing, encoding conversion, and optional guarded LLM review.
 4. Inspect the cumulative working result, then explicitly save the cleaned files and cleaning logs.
@@ -399,7 +399,7 @@ A typical BFSU LexiScope workflow may look like this:
 典型使用流程可以概括为：
 
 ```text
-1. 使用 BFSU WebLens 通过自动采集或手动采集发现网络新闻或网页 URL，也可导入保存的搜索结果页或粘贴链接，随后下载来源页面、抽取多语种文本，并导出检索与下载元信息；
+1. 使用 BFSU WebLens 发现并采集网络新闻或网页 URL，保存来源信息，下载多语种正文，并导出检索与下载元信息；
 2. 使用 BFSU ProofLens 将扫描版 PDF 或图片转换为可编辑文本，并校对 OCR 结果；
 3. 将网页文本、OCR 文本、格式转换文本或人工转写文本导入 BFSU ClearLens，执行确定性整理、正则处理、编码转换和可选的受控大模型校对；
 4. 检查依次叠加的当前工作结果，再显式保存整理后的文件和整理日志；
@@ -453,29 +453,30 @@ python -m pip install -r requirements.txt
 pyinstaller --noconfirm --clean --onedir --windowed --name "BFSU_ToolName" --icon "assets\app.ico" main.py
 ```
 
-Each subtool may require additional `--add-data`, `--collect-submodules` and `--hidden-import` options. For model-heavy tools such as ProofLens and AlignLens, large model folders are usually copied manually into the packaged folder after PyInstaller packaging. ClearLens uses an `onedir` layout in which runtime dependencies remain in `_internal`, while `assets`, `config`, `samples` and documentation remain beside the executable.
+Each subtool may require additional `--add-data`, `--collect-submodules` and `--hidden-import` options. For model-heavy tools such as ProofLens and AlignLens, large model folders are usually copied manually into the packaged folder after PyInstaller packaging. ClearLens uses an `onedir` layout in which runtime dependencies remain in `_internal`, while `assets`, `config`, `samples` and documentation remain beside the executable. WebLens likewise uses a complete release-directory layout so that browser components, configuration files and runtime dependencies remain discoverable.
 
-不同子工具可能需要额外的 `--add-data`、`--collect-submodules` 和 `--hidden-import` 参数。对于 ProofLens 和 AlignLens 这类依赖模型的工具，较大的模型文件夹通常建议在 PyInstaller 打包完成后手动复制到打包目录中。ClearLens 采用 `onedir` 结构：运行依赖放在 `_internal`，`assets`、`config`、`samples` 和说明文档与 EXE 同级。
+不同子工具可能需要额外的 `--add-data`、`--collect-submodules` 和 `--hidden-import` 参数。对于 ProofLens 和 AlignLens 这类依赖模型的工具，较大的模型文件夹通常建议在 PyInstaller 打包完成后手动复制到打包目录中。ClearLens 采用 `onedir` 结构：运行依赖放在 `_internal`，`assets`、`config`、`samples` 和说明文档与 EXE 同级。WebLens 同样要求保持完整发布目录，以确保浏览器组件、配置文件和运行依赖能够被正确发现。
 
 ---
 
 ## 6. Data and Privacy / 数据与隐私
 
 - Local functions run on the user's computer.
-- Project files, metadata records, OCR results, ClearLens working texts and alignment results remain local unless the user explicitly saves, exports or uploads them.
+- Project files, metadata records, OCR results, ClearLens working texts, WebLens result/download files and alignment results remain local unless the user explicitly saves, exports or uploads them.
 - LLM-assisted functions are optional.
 - If an API-based LLM is used, the selected text or prompt content may be sent to the configured API endpoint.
 - Users should avoid uploading confidential, sensitive or unpublished data to external APIs unless they have permission to do so.
 - API Keys should be stored locally and should not be committed to public repositories.
 - In ClearLens, selecting an output folder or running a cleaning command does not save a result file; only explicit save commands write the current working text to disk.
+- In WebLens, search results and content-download progress may be written to user-selected result/download files so that interrupted tasks can preserve completed work.
 
 ---
 
 ## 7. Notes / 注意事项
 
 - BFSU LexiScope is a research-support toolkit, not a fully automatic replacement for expert judgment.
-- OCR results, metadata extraction results, cleaned texts, automatic alignment results and LLM suggestions should always be checked by the user.
-- Users should verify exported texts, metadata and aligned files before using them in publications, teaching materials, corpus construction or statistical analysis.
+- OCR results, metadata extraction results, cleaned texts, automatic alignment results, web-text extraction results and LLM suggestions should always be checked by the user.
+- Users should verify exported texts, metadata, aligned files and web-derived corpus data before using them in publications, teaching materials, corpus construction or statistical analysis.
 - Some functions are still experimental and may change between versions.
 - If a function has not yet been released, please treat its description as a development plan rather than a completed feature.
 
@@ -485,7 +486,7 @@ Each subtool may require additional `--add-data`, `--collect-submodules` and `--
 
 Planned development directions include:
 
-- 完善 WebLens 网络语料采集、正文下载、多语种清洗和来源元信息追踪工作流；
+- 持续完善 WebLens 网络语料采集、正文下载、多语种清洗、浏览器配置和来源元信息追踪工作流；
 - 完善 OCR 与校对工作流；
 - 完善多语翻译对齐、对齐检查和语料导出工作流；
 - 增强大模型辅助语料处理能力；
@@ -498,7 +499,21 @@ Planned development directions include:
 
 ---
 
-## 9. About / 关于
+## 9. Research use and published studies / 学术使用与成果反馈
+
+如果您使用 **BFSU LexiScope** 或其中任何工具开展了研究，并发表了论文、著作、研究报告、语料库或其它学术成果，**欢迎通过邮件联系作者告知相关成果信息**。
+
+在方便且符合作者授权、出版与链接使用要求的情况下，我们也希望将使用 BFSU LexiScope 及其子工具形成的相关论文和研究成果信息发布在项目介绍或项目成果页面中，作为软件实际应用案例，并方便其他研究者了解这些工具在语料库建设、语言研究、翻译研究和语言教育研究中的实际使用情况。
+
+联系时可提供论文题目、作者、期刊/出版社、年份、DOI 或公开链接等基本信息。
+
+If you use **BFSU LexiScope** or any of its component tools in your research and publish an article, book, report, corpus or other academic output, you are very welcome to contact the author and let us know about the publication. Where appropriate and permitted, information about research produced with BFSU LexiScope may be listed in the project description or a project publication page as examples of scholarly use.
+
+**Contact / 联系方式：** djliu@bfsu.edu.cn
+
+---
+
+## 10. About / 关于
 
 **Project Name / 项目名称：** BFSU LexiScope / 北外 LexiScope 语料库智能工具箱
 
@@ -510,14 +525,18 @@ Planned development directions include:
 
 **Contact / 联系方式：** djliu@bfsu.edu.cn
 
+**BFSU Corpus Team / 北外语料库团队：** https://corpus.bfsu.edu.cn/
+
+**BFSUNLP GitHub：** https://github.com/bfsunlp
+
 Copyright © 2026 Dingjia LIU. All rights reserved.
 
-ChatGPT 5.5 contributed to the development process by assisting with code generation, feature iteration, interaction logic refinement, README drafting and documentation polishing. The overall design, research orientation, functional decisions, testing confirmation and final responsibility remain with the developer.
+OpenAI ChatGPT assisted parts of the development process, including code generation, feature iteration, interaction logic refinement, testing support and documentation drafting. The overall software design, research orientation, functional decisions, testing confirmation and final responsibility remain with the developer.
 
 ---
 
-## 10. Disclaimer / 免责声明
+## 11. Disclaimer / 免责声明
 
-BFSU LexiScope and its subtools are designed for research support, corpus construction and data processing. Automatically generated results, including OCR output, deterministic or LLM-assisted text cleaning, LLM-assisted proofreading, metadata extraction, automatic alignment and future statistical reports, may contain errors. Users are responsible for checking, revising and confirming all outputs before using them for academic publication, teaching, corpus release or formal research analysis.
+BFSU LexiScope and its subtools are designed for research support, corpus construction and data processing. Automatically generated results, including OCR output, deterministic or LLM-assisted text cleaning, LLM-assisted proofreading, metadata extraction, automatic alignment, web search/result parsing, web-text extraction and future statistical reports, may contain errors. Users are responsible for checking, revising and confirming all outputs before using them for academic publication, teaching, corpus release or formal research analysis.
 
-BFSU LexiScope 及其子工具主要用于科研辅助、语料库建设和数据处理。自动生成结果，包括 OCR 文本、确定性或大模型辅助文本整理、大模型校对建议、元信息抽取、自动对齐结果以及未来的数据分析报告，均可能存在错误。用户在将相关结果用于论文发表、教学材料、语料库发布或正式研究分析前，应自行检查、修订并确认其准确性。
+BFSU LexiScope 及其子工具主要用于科研辅助、语料库建设和数据处理。自动生成结果，包括 OCR 文本、确定性或大模型辅助文本整理、大模型校对建议、元信息抽取、自动对齐结果、网页检索与结果解析、网页正文抽取以及未来的数据分析报告，均可能存在错误。用户在将相关结果用于论文发表、教学材料、语料库发布或正式研究分析前，应自行检查、修订并确认其准确性。
