@@ -1,6 +1,6 @@
 # BFSU WebLens v3.1.9
 
-**BFSU WebLens** is the web and news corpus collection component of **BFSU LexiScope**, developed by the BFSU Corpus Research Team. It is designed for corpus construction, web/news corpus collection, corpus-based discourse studies, translation and media research, and other research workflows that require traceable discovery, review, downloading and organization of web resources.
+**BFSU WebLens** is the web and news corpus collection component of **BFSU LexiScope**, developed by the BFSU Corpus Research Group. It is designed for corpus construction, web/news corpus collection, corpus-based discourse studies, translation and media research, and other research workflows that require traceable discovery, review, downloading and organization of web resources.
 
 **BFSU WebLens / 北外 WebLens 网络语料采集工具** 是 **BFSU LexiScope** 的网络语料采集组件，由北外语料库团队开发，面向网页语料库建设、新闻语料采集、语料库话语研究、翻译研究、国际传播与传媒研究等场景。软件将搜索结果发现、结果筛选与整理、链接导入导出、网页正文下载、元信息保存和语料文本准备整合为一个可追溯的工作流程。
 
@@ -19,12 +19,12 @@
 **Windows x64 package / Windows x64 发布包：** `BFSU_WebLens_v3.1.9_windows_x64.zip`
 
 **Direct Download / 直接下载：**  
-https://icloud.bfsu.edu.cn/f/7f517cc69a284d798057/
+https://icloud.bfsu.edu.cn/f/606e7a47cbce4e758174/
 
 **Baidu Netdisk / 百度网盘：**  
-https://pan.baidu.com/s/1jueUmdCS1J6yCAaro9a2uA?pwd=jxh2
+https://pan.baidu.com/s/1p-65itRM7KSX9x9xtsIrhQ?pwd=xiyx
 
-**Extraction Code / 提取码：** `jxh2`
+**Extraction Code / 提取码：** `xiyx`
 
 下载后请**完整解压 ZIP 文件**，然后从完整发布目录运行 `BFSU_WebLens.exe`。不要只单独移动 EXE 文件，否则浏览器组件、配置文件或运行依赖可能无法正常找到。
 
@@ -42,6 +42,12 @@ After downloading, **extract the complete ZIP package** and run `BFSU_WebLens.ex
 - 如果结果状态没有变化，不会无意义地重复重写大型结果文件。
 
 Automatic Google/Baidu collection now preserves all results already collected when the user stops a task or when collection terminates because of a browser, network or other exception. A final save check is performed after the worker has actually stopped so late queued records are not lost.
+
+### Interface units, publication dates and project naming / 参数单位、发布时间与项目名称
+
+- **Page-turn wait range / 翻页等待范围** 改为以“秒”为界面输入单位，更符合用户对等待时间的直观理解；内部仍转换为毫秒，并在设定范围内按毫秒粒度随机取值；
+- Result Preview 的 `Published / 发布时间` 统一显示为 **DD-MM-YYYY（日-月-年）**，点击该表头时按解析后的实际日期排序，不再按文本字面顺序排序；
+- README、软件 About 及相关帮助文本中的团队官方名称统一为 **BFSU Corpus Research Group / 北外语料库团队**。
 
 ### Content-download persistence and resume / 正文下载保存与断点续下
 
@@ -66,7 +72,8 @@ The existing content-download checkpoint mechanism is preserved. Successfully do
 - 百度的多个检索词和多个站点/域名按独立任务展开，完整任务逻辑为 **检索词 × 域名 × 日期切片**，不会自动用 OR 合并不同任务；
 - 日期限定默认关闭，仅在用户主动启用后向搜索引擎发送日期范围；
 - 不人为设置每页结果数，也不设置固定最大页数，而是跟随搜索引擎页面自身的 **Next / 下一页**；
-- 对采集结果进行全局 URL 去重。
+- 对采集结果进行全局 URL 去重；
+- 左侧 **Page-turn wait range / 翻页等待范围** 统一以“秒”为用户输入单位；保存到配置和传入采集器时自动换算为毫秒，实际等待仍在两个毫秒端点之间随机取值。
 
 WebLens supports Google Web/News and Baidu Web/News/Media workflows. Date filtering is opt-in, and pagination follows the search engine's own rendered Next link rather than WebLens-generated page offsets.
 
@@ -144,6 +151,8 @@ Google 与百度均使用独立的结果列表。Result Preview 支持：
 - 第一次点击按该列正序排列；
 - 再次点击同一表头切换为逆序；
 - 支持 Link、Collected time、Title、Source、Published time、Content status、Word count、Quality 等字段；
+- `Published / 发布时间` 在 Result Preview 中统一显示为 **DD-MM-YYYY（日-月-年）**；原始发布时间文本仍保存在记录中，不因界面格式化而改写；
+- Published 排序会先解析 ISO 日期、中文年月日、英文月份日期、搜索引擎相对时间（如 `3 hours ago`、`2天前`）等常见形式，再按实际日期先后排序，不再按字符串字面顺序排序；无法可靠解析的日期保留原文并排在可解析日期之后；
 - 空值始终排在末尾；
 - 词数和质量值按数值而不是字符串排序；
 - 表格最左侧的 `1..N` 为固定显示序号，不作为数据字段保存，也不会随记录排序而移动；
@@ -299,9 +308,9 @@ WebLens is intended for research-oriented, low-frequency and auditable collectio
 **Project / 项目：** BFSU LexiScope  
 **Component / 工具：** BFSU WebLens  
 **Developer / 开发者：** Dr. Dingjia LIU / 刘鼎甲 博士  
-**Team / 团队：** BFSU Corpus Research Team / 北外语料库团队  
+**Team / 团队：** BFSU Corpus Research Group / 北外语料库团队  
 **Contact / 联系方式：** djliu@bfsu.edu.cn  
-**BFSU Corpus Team / 北外语料库团队：** https://corpus.bfsu.edu.cn/  
+**BFSU Corpus Research Group / 北外语料库团队：** https://corpus.bfsu.edu.cn/  
 **BFSUNLP GitHub：** https://github.com/bfsunlp  
 **BFSU LexiScope：** https://github.com/bfsunlp/bfsu_lexiscope
 
@@ -317,7 +326,10 @@ Copyright © 2026 Dingjia LIU. All rights reserved.
 
 - 采集任务人工停止或异常终止时自动保存已采集结果；
 - 正文下载停止或异常时保存当前结果状态；
-- 保留并强化正文下载断点续下机制。
+- 保留并强化正文下载断点续下机制；
+- 统一使用 **BFSU Corpus Research Group / 北外语料库团队** 官方名称；
+- 翻页等待范围改为界面按秒设置、内部按毫秒随机等待；
+- Result Preview 的 Published 时间统一为 DD-MM-YYYY 显示，并改为实际日期排序。
 
 ### v3.1.8
 
@@ -341,4 +353,4 @@ Copyright © 2026 Dingjia LIU. All rights reserved.
 
 ---
 
-**BFSU Corpus Research Team / 北外语料库团队**
+**BFSU Corpus Research Group / 北外语料库团队**

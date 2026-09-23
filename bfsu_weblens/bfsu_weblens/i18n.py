@@ -12,19 +12,19 @@ TEXTS = {
         "app_title": "BFSU WebLens",
         "collection_browser": "Collection browser",
         "hide_browser": "Do not show the collection browser window",
-        "page_delay": "Page-turn wait range (ms)",
+        "page_delay": "Page-turn wait range (seconds)",
     },
     "zh_sim": {
         "app_title": "BFSU WebLens",
         "collection_browser": "采集浏览器",
         "hide_browser": "不显示采集浏览器界面",
-        "page_delay": "翻页等待范围（毫秒）",
+        "page_delay": "翻页等待范围（秒）",
     },
     "zh_tra": {
         "app_title": "BFSU WebLens",
         "collection_browser": "採集瀏覽器",
         "hide_browser": "不顯示採集瀏覽器介面",
-        "page_delay": "翻頁等待範圍（毫秒）",
+        "page_delay": "翻頁等待範圍（秒）",
     },
 }
 

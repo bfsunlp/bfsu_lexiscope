@@ -1,4 +1,4 @@
-# BFSU WebLens 3.1.6 release builds
+# BFSU WebLens release builds
 
 BFSU WebLens release builds must be created on the target operating system. Windows packages are built on Windows; macOS packages are built on macOS.
 

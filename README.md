@@ -197,6 +197,7 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 - 百度多个检索词和多个站点/域名按独立任务展开，任务逻辑为 **检索词 × 域名 × 日期切片**；
 - 日期限定默认关闭，仅在用户主动启用后向搜索引擎发送日期范围；
 - 自动翻页跟随搜索引擎页面自身的 **Next / 下一页**；
+- 左侧 **Page-turn wait range / 翻页等待范围** 以秒为单位显示和设置，便于用户直接理解等待节奏；内部仍转换为毫秒并在设定范围内随机取值；
 - 支持连续无新增结果自动停止，并对结果进行全局 URL 去重；
 - 当 Google 或百度出现人工验证页面时，WebLens 会暂停自动导航并允许用户直接在浏览器中完成验证，验证结束后再继续采集；
 - Google News 若返回 `google.* /goto?url=CAES...` 跳转链接，WebLens 会在可用时解析并直接保存真实外部 URL；解析失败时保留原跳转链接作为安全回退。
@@ -217,6 +218,7 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 - 支持导入已有 URL，也可从普通文本、HTML 或 Markdown 中抽取链接；
 - 结果表格可直接点击表头排序：第一次点击正序，再次点击同一表头切换为逆序；
 - 支持 Link、Collected time、Title、Source、Published time、Content status、Word count、Quality 等字段排序；
+- Result Preview 中 **Published** 统一以 `DD-MM-YYYY` 显示；排序时按解析后的实际日期先后排序，而不是按日期文本字面排序，同时保留原始发布时间元数据；
 - 空值始终排在末尾，词数和质量值按数值排序；
 - 表格最左侧 `1..N` 为显示序号，不作为数据字段保存，排序时始终保持连续显示；
 - 支持导出 XLSX、CSV、TXT、DOCX 和 XML；
@@ -247,12 +249,12 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 **Windows x64 package / Windows x64 发布包：** `BFSU_WebLens_v3.1.9_windows_x64.zip`
 
 **Direct Download / 直接下载：**  
-https://icloud.bfsu.edu.cn/f/7f517cc69a284d798057/
+https://icloud.bfsu.edu.cn/f/606e7a47cbce4e758174/
 
 **Baidu Netdisk / 百度网盘：**  
-https://pan.baidu.com/s/1jueUmdCS1J6yCAaro9a2uA?pwd=jxh2
+https://pan.baidu.com/s/1p-65itRM7KSX9x9xtsIrhQ?pwd=xiyx
 
-**Extraction Code / 提取码：** `jxh2`
+**Extraction Code / 提取码：** `xiyx`
 
 #### Notes / 使用提示
 
@@ -525,7 +527,7 @@ If you use **BFSU LexiScope** or any of its component tools in your research and
 
 **Contact / 联系方式：** djliu@bfsu.edu.cn
 
-**BFSU Corpus Team / 北外语料库团队：** https://corpus.bfsu.edu.cn/
+**BFSU Corpus Research Group / 北外语料库团队：** https://corpus.bfsu.edu.cn/
 
 **BFSUNLP GitHub：** https://github.com/bfsunlp
 

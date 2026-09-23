@@ -99,6 +99,7 @@ from ..content_downloader import (
     load_successful_download_index,
     successful_manifest_for_record,
 )
+from ..date_utils import format_published_date, published_sort_key
 from ..data import (
     APP_LANGS,
     BAIDU_SORT_OPTIONS,
@@ -116,6 +117,7 @@ from ..exporter import export_import_template, export_records
 from ..importer import import_records, import_urls_from_text
 from ..manual_collection import generate_manual_search_tasks, parse_saved_search_page
 from ..resources import apply_window_icon, resource_path
+from ..timing_utils import milliseconds_to_ui_seconds, ui_seconds_to_milliseconds
 from ..platform_paths import user_data_root
 from ..maintenance import clear_web_components
 
@@ -250,7 +252,7 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "end_date": "End date",
         "day_step": "Date-slice step (days; 0 = no slicing)",
         "timeout": "Page-load timeout (seconds)",
-        "page_delay": "Page-turn wait range (ms)",
+        "page_delay": "Page-turn wait range (seconds)",
         "pagination_note": "Page size and page count are not set by WebLens. Each search begins with the engine's default result page and continues only through the engine-provided Next link. The same wait range is used between pages, date slices, and transient page-load retries.",
         "languages": "Result languages",
         "countries": "Country/region restrictions",
@@ -446,7 +448,7 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "end_date": "结束日期",
         "day_step": "日期切片步长（天；0=不切片）",
         "timeout": "页面加载超时（秒）",
-        "page_delay": "翻页等待范围（毫秒）",
+        "page_delay": "翻页等待范围（秒）",
         "pagination_note": "WebLens 不设置每页结果数，也不设置最大页数。每次检索从搜索引擎默认结果页开始，只跟随搜索引擎页面自身提供的“下一页”继续采集。翻页、日期切片之间以及临时页面加载错误后的等待统一使用这一等待范围。",
         "languages": "结果语种",
         "countries": "国家/地区限定",
@@ -565,7 +567,7 @@ UI_TEXTS["zh_tra"] = dict(UI_TEXTS["zh_sim"], **{
     "site_filters_baidu": "站點/域名限定\n（每行一個，逐項檢索）",
     "browser_settings": "瀏覽器與 Selenium…", "browser_settings_title": "瀏覽器與 Selenium", "browser_detected": "已偵測到的瀏覽器", "browser_driver": "WebDriver", "browser_type": "瀏覽器", "sort_by": "排序", "sort_none": "原始順序",
     "result_preview": "結果預覽", "log": "日誌", "hide_browser": "不顯示採集瀏覽器介面",
-    "page_delay": "翻頁等待範圍（毫秒）", "stop_download": "停止下載", "stopping_download": "正在停止下載……", "download_stopped": "下載已停止。", "ready": "就緒。", "running": "正在採集……",
+    "page_delay": "翻頁等待範圍（秒）", "stop_download": "停止下載", "stopping_download": "正在停止下載……", "download_stopped": "下載已停止。", "ready": "就緒。", "running": "正在採集……",
     "done": "採集完成。", "stopped": "已停止。", "close": "關閉",
     "clear_web_components": "清除 WebLens Web 元件…",
     "confirm_clear_web_components": "是否刪除 WebLens 管理的便攜瀏覽器、WebDriver 及其專用快取？系統安裝的 Chrome/Edge 和使用者語料輸出檔不會被刪除。",
@@ -840,7 +842,7 @@ class RecordTableModel(QAbstractTableModel):
             if col == "source":
                 return str(getattr(rec, "source", ""))
             if col == "published":
-                return str(getattr(rec, "published_time", ""))
+                return format_published_date(getattr(rec, "published_time", ""), getattr(rec, "collected_at", ""))
             if col == "status":
                 return str(getattr(rec, "content_status", ""))
             if col == "words":
@@ -856,7 +858,11 @@ class RecordTableModel(QAbstractTableModel):
                     return str(value)
             if col == "link":
                 return str(getattr(rec, "link", ""))
-        if role == Qt.ItemDataRole.ToolTipRole and col in {"title", "link"}:
+        if role == Qt.ItemDataRole.ToolTipRole and col in {"title", "link", "published"}:
+            if col == "published":
+                raw = str(getattr(rec, "published_time", "") or "")
+                shown = format_published_date(raw, getattr(rec, "collected_at", ""))
+                return raw if not shown or shown == raw else f"{shown}  |  {raw}"
             return str(getattr(rec, "title" if col == "title" else "link", ""))
         return None
 
@@ -1012,8 +1018,8 @@ class CollectorPanel(QWidget):
                 pass
         self.day_step_spin = QSpinBox(); self.day_step_spin.setRange(0, 3650)
         self.timeout_spin = QSpinBox(); self.timeout_spin.setRange(1, 600)
-        self.page_delay_min = QSpinBox(); self.page_delay_min.setRange(0, 9999999)
-        self.page_delay_max = QSpinBox(); self.page_delay_max.setRange(0, 9999999)
+        self.page_delay_min = QSpinBox(); self.page_delay_min.setRange(0, 9999); self.page_delay_min.setSingleStep(1)
+        self.page_delay_max = QSpinBox(); self.page_delay_max.setRange(0, 9999); self.page_delay_max.setSingleStep(1)
         delay_row = QWidget()
         delay_layout = QHBoxLayout(delay_row)
         delay_layout.setContentsMargins(0, 0, 0, 0)
@@ -1342,7 +1348,7 @@ class CollectorPanel(QWidget):
         if not end_qdate.isValid(): end_qdate = today_qdate
         if not self.date_filter_check.isChecked() or start_qdate > end_qdate:
             start_qdate = end_qdate = today_qdate
-        self.start_date_edit.setDate(start_qdate); self.end_date_edit.setDate(end_qdate); self.day_step_spin.setValue(int(s.get("day_step",0))); self.timeout_spin.setValue(int(s.get("timeout",20))); self.page_delay_min.setValue(int(s.get("page_delay_min_ms",30000))); self.page_delay_max.setValue(int(s.get("page_delay_max_ms",90000)))
+        self.start_date_edit.setDate(start_qdate); self.end_date_edit.setDate(end_qdate); self.day_step_spin.setValue(int(s.get("day_step",0))); self.timeout_spin.setValue(int(s.get("timeout",20))); self.page_delay_min.setValue(milliseconds_to_ui_seconds(s.get("page_delay_min_ms",30000), 30000)); self.page_delay_max.setValue(milliseconds_to_ui_seconds(s.get("page_delay_max_ms",90000), 90000))
         self._date_filter_toggled(self.date_filter_check.isChecked())
         self._normalize_date_controls(reset_when_unfiltered=True)
         self.output_edit.setText(str(s.get("output_path",default_output_path(self.engine)))); self.output_format_combo.setCurrentText(str(s.get("output_format","xlsx")))
@@ -1355,7 +1361,7 @@ class CollectorPanel(QWidget):
         data.update({
             "query_mode": combo_key(self.query_mode_combo,"single"), "search_vertical": combo_key(self.vertical_combo,"news"), "baidu_sort": combo_key(self.baidu_sort_combo,"focus"),
             "query_terms": self.query_text.toPlainText().strip(), "site_filters": self.site_text.toPlainText().strip(), "safe": str(self.safe_combo.currentData() or ""), "disable_filter": self.disable_filter_check.isChecked(),
-            "date_filter_enabled": self.date_filter_check.isChecked(), "start_date": self.start_date_edit.date().toString("yyyy-MM-dd"), "end_date": self.end_date_edit.date().toString("yyyy-MM-dd"), "day_step": self.day_step_spin.value(), "timeout": self.timeout_spin.value(), "page_delay_min_ms": self.page_delay_min.value(), "page_delay_max_ms": self.page_delay_max.value(),
+            "date_filter_enabled": self.date_filter_check.isChecked(), "start_date": self.start_date_edit.date().toString("yyyy-MM-dd"), "end_date": self.end_date_edit.date().toString("yyyy-MM-dd"), "day_step": self.day_step_spin.value(), "timeout": self.timeout_spin.value(), "page_delay_min_ms": ui_seconds_to_milliseconds(self.page_delay_min.value()), "page_delay_max_ms": ui_seconds_to_milliseconds(self.page_delay_max.value()),
             "languages_lr": self.selected_list_values(self.languages_list) if self.engine == "google" else [], "countries_cr": self.selected_list_values(self.countries_list) if self.engine == "google" else [],
             "output_path": self.output_edit.text().strip(), "output_format": self.output_format_combo.currentText().strip().lower(), "content_download_dir": str(self._settings.get("content_download_dir", app_base_dir()/"content_downloads")), "content_threads": int(self._settings.get("content_threads",3)), "content_fetch_mode": str(self._settings.get("content_fetch_mode","mixed")), "content_delay_min_ms": int(self._settings.get("content_delay_min_ms",0)), "content_delay_max_ms": int(self._settings.get("content_delay_max_ms",0)), "content_receive_wait_ms": int(self._settings.get("content_receive_wait_ms",5000)), "content_cleaning_scheme": str(self._settings.get("content_cleaning_scheme","auto")),
             "sample_scheme": combo_key(self.sample_scheme_combo,"simple"), "sample_count": self.sample_count_spin.value(), "user_agent": self._settings.get("user_agent",DEFAULT_USER_AGENT),
@@ -1540,7 +1546,11 @@ class CollectorPanel(QWidget):
         if key == "source":
             return str(getattr(record, "source", "") or "").casefold()
         if key == "published":
-            return str(getattr(record, "published_time", "") or "").casefold()
+            parsed = published_sort_key(
+                getattr(record, "published_time", ""),
+                getattr(record, "collected_at", ""),
+            )
+            return parsed if parsed is not None else (0, 0, 0, 0, 0, 0)
         if key == "status":
             return str(getattr(record, "content_status", "") or "").casefold()
         if key == "words":
@@ -1610,6 +1620,8 @@ class CollectorPanel(QWidget):
                     "quality": "content_quality_score",
                 }.get(key, "")
                 value = getattr(record, attr, None) if attr else None
+                if key == "published":
+                    return published_sort_key(value, getattr(record, "collected_at", "")) is not None
                 return value not in (None, "")
 
             filled = [r for r in self.records if has_value(r)]
@@ -3648,7 +3660,7 @@ class BFSUWebLensWindow(QMainWindow):
               <li><b>Collect links.</b> Start collection and Stop control search-engine collection only. WebLens does not set page size or a maximum page count and follows only the search engine's own Next link.</li>
               <li><b>Complete human verification in the browser.</b> WebLens pauses all navigation commands while a verification page is present. After verification, it waits for the real result DOM and resumes from the page already open.</li>
               <li><b>Import or paste existing links when needed.</b> TXT supports one URL per line; XLSX/CSV can place URLs in the first column; WebLens exports can be re-imported. <i>Paste links from text</i> extracts HTTP/HTTPS links from prose, HTML or Markdown and appends them to the current Result Preview. Imported links may have no title initially.</li>
-              <li><b>Review results.</b> Open, delete, sort and sample records in Result Preview. Google News may expose an opaque Google <code>/goto</code> result redirect. During automatic collection WebLens first asks Google for the redirect target and stores the direct external URL when available; unresolved redirects are retained as a safe fallback and can still be replaced after successful content downloading.</li>
+              <li><b>Review results.</b> Open, delete, sort and sample records in Result Preview. The Published column is displayed as DD-MM-YYYY and sorted chronologically after parsing common absolute and relative search-engine date formats; the original publication-time text remains stored in the record. Google News may expose an opaque Google <code>/goto</code> result redirect. During automatic collection WebLens first asks Google for the redirect target and stores the direct external URL when available; unresolved redirects are retained as a safe fallback and can still be replaced after successful content downloading.</li>
               <li><b>Download content.</b> Configure download settings once, then use Download selected content or Download all content. Stop download is independent from Stop collection. Successful downloading can complete missing title, publication time and final URL information.</li>
             </ol>
             """
@@ -3667,7 +3679,7 @@ class BFSUWebLensWindow(QMainWindow):
               <li><b>採集連結。</b>「開始採集」和「停止」只控制搜索結果採集。WebLens 不設定每頁結果數和最大頁數，只跟隨搜索引擎自身提供的「下一頁」。</li>
               <li><b>人工驗證。</b> 出現驗證頁時，WebLens 停止發送導航指令；用戶在瀏覽器中完成驗證後，軟體等待真實結果 DOM 穩定，再從當前頁面恢復。</li>
               <li><b>匯入或貼上已有連結。</b> TXT 可每行一個 URL；XLSX/CSV 可將 URL 放在首列；WebLens 自己匯出的檔案也可重新匯入。「貼上文字解析連結」可從普通文字、HTML 或 Markdown 中抽取 HTTP/HTTPS 連結並追加到當前結果列表。匯入時標題可以暫時為空。</li>
-              <li><b>整理結果。</b> 可在結果預覽中開啟、刪除、排序和抽樣。Google 新聞有時會提供不透明的 Google <code>/goto</code> 跳轉連結；自動採集時 WebLens 會先向 Google 取得跳轉目標並直接保存外部 URL。若當次無法解析，仍保留 <code>/goto</code> 作為安全後備，正文下載成功後可再次替換為最終 URL。</li>
+              <li><b>整理結果。</b> 可在結果預覽中開啟、刪除、排序和抽樣。Published/發布時間統一以 DD-MM-YYYY（日-月-年）顯示，排序時會先解析常見絕對日期與相對時間後按實際日期排序，原始時間文字仍保留在記錄中。Google 新聞有時會提供不透明的 Google <code>/goto</code> 跳轉連結；自動採集時 WebLens 會先向 Google 取得跳轉目標並直接保存外部 URL。若當次無法解析，仍保留 <code>/goto</code> 作為安全後備，正文下載成功後可再次替換為最終 URL。</li>
               <li><b>下載正文。</b> 下載參數只需設定一次；「停止下載」與「停止採集」彼此獨立。下載成功後可補全缺失的標題、發布時間和最終 URL。</li>
             </ol>
             """
@@ -3686,7 +3698,7 @@ class BFSUWebLensWindow(QMainWindow):
               <li><b>采集链接。</b>“开始采集”和“停止”只控制搜索结果采集。WebLens 不设置每页结果数，也不设置最大页数，只跟随搜索引擎页面自身提供的“下一页”。</li>
               <li><b>人工验证。</b> 出现验证页时，WebLens 停止发送导航指令；用户在浏览器中完成验证后，软件等待真实结果 DOM 稳定，再从当前页面恢复采集。</li>
               <li><b>导入或粘贴已有链接。</b> TXT 支持每行一个 URL；XLSX/CSV 可把 URL 放在首列；WebLens 自己导出的文件也可重新导入。“粘贴文本解析链接”可从普通文字、HTML 或 Markdown 中抽取 HTTP/HTTPS 链接，并追加到当前结果列表。导入时标题可以暂时为空。</li>
-              <li><b>整理结果。</b> 可在结果预览中打开、删除、排序和抽样。Google 新闻有时会提供不透明的 Google <code>/goto</code> 跳转链接；自动采集时 WebLens 会先向 Google 获取跳转目标并直接保存外部 URL。若当次无法解析，仍保留 <code>/goto</code> 作为安全回退，正文下载成功后还可再次替换为最终 URL。</li>
+              <li><b>整理结果。</b> 可在结果预览中打开、删除、排序和抽样。Published/发布时间统一以 DD-MM-YYYY（日-月-年）显示，排序时会先解析常见绝对日期与相对时间后按实际日期排序，原始时间文字仍保留在记录中。Google 新闻有时会提供不透明的 Google <code>/goto</code> 跳转链接；自动采集时 WebLens 会先向 Google 获取跳转目标并直接保存外部 URL。若当次无法解析，仍保留 <code>/goto</code> 作为安全回退，正文下载成功后还可再次替换为最终 URL。</li>
               <li><b>下载正文。</b> 下载参数只设置一次；“停止下载”与“停止采集”彼此独立。下载成功后可以补全缺失的标题、发布时间和最终 URL。</li>
             </ol>
             """
@@ -3703,7 +3715,7 @@ class BFSUWebLensWindow(QMainWindow):
             <p><b>Search vertical.</b> Google supports Web and News. Baidu supports Web, News/Information and media-site News.</p>
             <p><b>Language and region.</b> Google language and country/region restrictions are optional.</p>
             <p><b>Date restriction.</b> Off by default. When disabled, no date-range parameter is sent. When enabled, the selected range can be split by Date-slice step; 0 keeps the entire range as one slice.</p>
-            <p><b>Page-turn wait.</b> The same random wait range is used between result pages, between date slices and before the one retry after a transient page-load error.</p>
+            <p><b>Page-turn wait.</b> The range is entered in seconds for readability. WebLens converts the two endpoints to milliseconds internally and chooses a random wait at millisecond granularity between result pages, between date slices and before the one retry after a transient page-load error.</p>
             <p><b>Pagination.</b> WebLens has no page-size setting and no maximum-page setting. It loads the default first page and follows only the search engine's own Next link.</p>
             <p><b>Manual collection.</b> This mode uses the same query/date/language/region settings only to generate initial search URLs. It performs no automated navigation and needs no Selenium environment. Saved Google/Baidu result-page HTML files can be imported repeatedly; links are extracted, deduplicated and appended to Result Preview.</p>
             <p><b>Human verification.</b> While verification is present, WebLens sends no refresh, pagination, browser-restart or new-page navigation command. Collection resumes only after the live result DOM becomes stable.</p>
@@ -3722,7 +3734,7 @@ class BFSUWebLensWindow(QMainWindow):
             <p><b>檢索類型。</b> Google 支援網頁和新聞；百度支援網頁、資訊以及媒體網站資訊。</p>
             <p><b>語種與區域。</b> Google 的結果語種和國家/地區限定均為可選。</p>
             <p><b>日期限定。</b> 預設關閉。關閉時不發送日期範圍；開啟後才使用選定日期，切片步長為 0 時整個範圍作為一個切片。</p>
-            <p><b>翻頁等待。</b> 結果翻頁、日期切片之間以及臨時頁面載入錯誤後的單次重試均使用同一隨機等待範圍。</p>
+            <p><b>翻頁等待。</b> 界面以秒為單位設定範圍；WebLens 內部轉換為毫秒，並在兩個端點之間按毫秒粒度隨機取值。結果翻頁、日期切片之間以及臨時頁面載入錯誤後的單次重試均使用這一範圍。</p>
             <p><b>翻頁方式。</b> WebLens 不設定每頁結果數，也不設定最大頁數，只跟隨搜索引擎自身的「下一頁」。</p>
             <p><b>手動採集。</b> 此模式只使用相同的檢索詞、日期、語種與區域等參數來產生初始搜索連結，不進行任何自動導航，也不需要 Selenium。用戶可反覆匯入手動儲存的 Google/百度搜索結果 HTML，WebLens 解析、去重後追加到結果預覽。</p>
             <p><b>人工驗證。</b> 驗證期間不刷新、不翻頁、不重啟瀏覽器，也不開啟新搜索頁；只有實時結果 DOM 穩定後才恢復。</p>
@@ -3741,7 +3753,7 @@ class BFSUWebLensWindow(QMainWindow):
             <p><b>检索类型。</b> Google 支持网页和新闻；百度支持网页、资讯以及媒体网站资讯。</p>
             <p><b>语种与区域。</b> Google 的结果语种和国家/地区限定均为可选；中文界面的名称后附英文名称。</p>
             <p><b>日期限定。</b> 默认关闭。关闭时不发送日期范围；开启后才使用选定日期，日期切片步长为 0 时整个范围作为一个切片。</p>
-            <p><b>翻页等待。</b> 结果翻页、日期切片之间以及临时页面加载错误后的单次重试均使用同一随机等待范围。</p>
+            <p><b>翻页等待。</b> 界面以秒为单位设置范围；WebLens 内部转换为毫秒，并在两个端点之间按毫秒粒度随机取值。结果翻页、日期切片之间以及临时页面加载错误后的单次重试均使用这一范围。</p>
             <p><b>翻页方式。</b> WebLens 不设置每页结果数，也不设置最大页数，只跟随搜索引擎自身提供的“下一页”。</p>
             <p><b>手动采集。</b> 此模式只使用相同的检索词、日期、语种与区域等参数生成初始搜索链接，不进行任何自动导航，也不需要 Selenium。用户可反复导入手动保存的 Google/百度搜索结果 HTML，WebLens 解析、去重后追加到结果预览。</p>
             <p><b>人工验证。</b> 验证期间不刷新、不翻页、不重启浏览器，也不打开新的搜索页；只有实时结果 DOM 稳定后才恢复。</p>
@@ -3766,8 +3778,8 @@ class BFSUWebLensWindow(QMainWindow):
             <h2>About BFSU WebLens</h2>
             <p><b>Version:</b> {APP_VERSION}</p>
             <p><b>Author:</b> Dr. Dingjia Liu</p>
-            <p><b>BFSU Corpus Team:</b> WebLens is developed within the corpus-tool work of the BFSU Corpus Research Group. The team's official website provides information on corpus research, corpora, tools, publications and related activities.</p>
-            <p><a href="{corpus_url}">BFSU Corpus Team official website</a></p>
+            <p><b>BFSU Corpus Research Group:</b> BFSU WebLens is developed by the BFSU Corpus Research Group as part of its corpus-tool development. The group's official website provides information on corpus research, corpora, tools, publications and related activities.</p>
+            <p><a href="{corpus_url}">BFSU Corpus Research Group official website</a></p>
             <p><b>BFSUNLP on GitHub:</b> <a href="{github_url}">{github_url}</a></p>
             <p><b>BFSU LexiScope:</b> LexiScope is an open-source corpus toolkit for corpus construction, metadata management, concordancing, parallel-corpus processing and AI-assisted linguistic analysis. BFSU WebLens is its web/news collection component, supporting corpus-oriented link discovery, review, export and destination-page downloading.</p>
             <p><a href="{lexiscope_url}">BFSU LexiScope project on GitHub</a></p>
@@ -3782,8 +3794,8 @@ class BFSUWebLensWindow(QMainWindow):
             <h2>關於 BFSU WebLens</h2>
             <p><b>版本：</b>{APP_VERSION}</p>
             <p><b>作者：</b>劉鼎甲 博士</p>
-            <p><b>北外語料庫團隊：</b>WebLens 是北外語料庫團隊語料工具建設的一部分。團隊官方網站提供語料庫研究、語料庫資源、工具、成果與學術活動等資訊。</p>
-            <p><a href="{corpus_url}">北外語料庫團隊官方網站</a></p>
+            <p><b>北外语料库团队：</b>WebLens 是北外语料库团队語料工具建設的一部分。團隊官方網站提供語料庫研究、語料庫資源、工具、成果與學術活動等資訊。</p>
+            <p><a href="{corpus_url}">北外语料库团队官方網站</a></p>
             <p><b>BFSUNLP GitHub：</b><a href="{github_url}">{github_url}</a></p>
             <p><b>BFSU LexiScope：</b>LexiScope 是一套開源語料庫工具集，面向語料庫建設、元資料管理、語料檢索、平行語料處理與 AI 輔助語言分析。BFSU WebLens 是其中的網頁/新聞採集組件，用於面向語料庫建設的連結發現、結果整理、匯出與目標頁面下載。</p>
             <p><a href="{lexiscope_url}">BFSU LexiScope GitHub 專案首頁</a></p>
