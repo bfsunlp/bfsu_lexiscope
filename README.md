@@ -176,11 +176,11 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 
 ---
 
-### 1.4 BFSU WebLens v3.1.9 / 网络语料检索、采集与网页下载工具
+### 1.4 BFSU WebLens v3.2.11 / 网络语料检索、采集与网页下载工具
 
-**BFSU WebLens v3.1.9** is the web and news corpus collection component of BFSU LexiScope. It integrates search-result discovery, review and organization, link import/export, source-page downloading, metadata preservation and corpus-text preparation into one traceable workflow. It supports Google Web, Google News, Baidu Web and Baidu News/Media workflows, together with automatic Selenium collection and a Selenium-free manual collection mode.
+**BFSU WebLens v3.2.11** is the web and news corpus collection component of BFSU LexiScope. It integrates search-result discovery, review and organization, link import/export, source-page downloading, metadata preservation and corpus-text preparation into one traceable workflow. It supports Google Web, Google News, Baidu Web and Baidu News/Media workflows, together with automatic Selenium collection and a Selenium-free manual collection mode.
 
-**BFSU WebLens v3.1.9 / 网络语料检索、采集与网页下载工具** 面向网页语料库建设、新闻语料采集、语料库话语研究、翻译研究、国际传播与传媒研究等场景，将搜索结果发现、结果筛选与整理、链接导入导出、网页正文下载、元信息保存和语料文本准备整合为一个可追溯的工作流程。其核心工作流为：
+**BFSU WebLens v3.2.11 / 网络语料检索、采集与网页下载工具** 面向网页语料库建设、新闻语料采集、语料库话语研究、翻译研究、国际传播与传媒研究等场景，将搜索结果发现、结果筛选与整理、链接导入导出、网页正文下载、元信息保存和语料文本准备整合为一个可追溯的工作流程。其核心工作流为：
 
 ```text
 检索设置 → Google / 百度结果采集 → 结果预览、去重与整理
@@ -218,7 +218,10 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 - 支持导入已有 URL，也可从普通文本、HTML 或 Markdown 中抽取链接；
 - 结果表格可直接点击表头排序：第一次点击正序，再次点击同一表头切换为逆序；
 - 支持 Link、Collected time、Title、Source、Published time、Content status、Word count、Quality 等字段排序；
+- Result Preview 明确显示 **Title / 标题 / 標題** 列，所有结果列均可通过鼠标拖动表头分隔线调整宽度；
 - Result Preview 中 **Published** 统一以 `DD-MM-YYYY` 显示；排序时按解析后的实际日期先后排序，而不是按日期文本字面排序，同时保留原始发布时间元数据；
+- Google 结果页可识别常见绝对日期和相对时间，包括中文、日文和英文形式；搜索阶段识别出的发布时间先写入结果记录；
+- 正文下载与搜索结果时间识别相互独立：若目标网页在下载阶段解析出更可靠的 `published_time`，则以目标网页时间覆盖搜索阶段已有值；若下载页未识别到发布时间，则保留搜索阶段的时间；
 - 空值始终排在末尾，词数和质量值按数值排序；
 - 表格最左侧 `1..N` 为显示序号，不作为数据字段保存，排序时始终保持连续显示；
 - 支持导出 XLSX、CSV、TXT、DOCX 和 XML；
@@ -244,23 +247,24 @@ https://pan.baidu.com/s/1x9EgCOhf8MoRACkhL09Dog
 
 #### Download / 下载
 
-**Current Release / 当前版本：** `BFSU WebLens v3.1.9`
+**Current Release / 当前版本：** `BFSU WebLens v3.2.11`
 
-**Windows x64 package / Windows x64 发布包：** `BFSU_WebLens_v3.1.9_windows_x64.zip`
+**Windows x64 package / Windows x64 发布包：** `BFSU_WebLens_v3.2.11_windows_x64.zip`
 
 **Direct Download / 直接下载：**  
-https://icloud.bfsu.edu.cn/f/606e7a47cbce4e758174/
+https://icloud.bfsu.edu.cn/f/418fbeab261c479b9009/
 
 **Baidu Netdisk / 百度网盘：**  
-https://pan.baidu.com/s/1p-65itRM7KSX9x9xtsIrhQ?pwd=xiyx
+https://pan.baidu.com/s/1A03r2ghy6Y6yihQ51Atncw?pwd=vynu
 
-**Extraction Code / 提取码：** `xiyx`
+**Extraction Code / 提取码：** `vynu`
 
 #### Notes / 使用提示
 
 - 下载后请完整解压 ZIP 文件，然后从完整发布目录运行 `BFSU_WebLens.exe`，不要只单独移动 EXE 文件；
 - 自动采集首次使用时可直接使用“一键配置 Chrome 与 Edge”；
 - 如果不希望使用 Selenium，可使用 Manual Collection / 手动采集模式；
+- **Known issue / 已知问题：** 在 Google News 中加入 `site:` 站点/域名限定时，Google 可能更容易触发自身的人类验证与自动跳转机制；验证完成后，Google 有时会把结果类型从 **News / 新闻** 切换到 **All / 全部**。这是已观察到的 Google 端验证与跳转行为，并非 WebLens 的检索式构造错误。若发生切换，建议先在浏览器中手动返回 **News / 新闻** 结果页，再回到 WebLens 确认继续采集；
 - WebLens 面向合法、低频、研究导向的网页发现、语料采集和正文准备；
 - 用户应自行遵守目标网站的服务条款、robots/访问政策、版权、隐私、访问频率限制以及相关法律法规；
 - 自动抽取的正文、标题、发布时间及其它 metadata 可能存在误差，正式用于论文、语料库发布或统计分析前应进行必要的人工检查。

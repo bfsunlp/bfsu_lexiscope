@@ -10,6 +10,8 @@ backend, page-count ceiling, or per-page result-size directive is used.
 from __future__ import annotations
 
 import html as html_lib
+import hashlib
+import json
 import os
 import random
 import re
@@ -55,6 +57,11 @@ BAIDU_RESULT_HOST_BLACKLIST = {
 }
 
 BAIDU_BEIJING_TZ = timezone(timedelta(hours=8))
+
+# Fixed internal safety limit for OR-composed search queries.  It is not a
+# user-facing setting: WebLens automatically splits longer OR lists into
+# deterministic batches of at most eight terms.
+OR_TERMS_PER_BATCH = 8
 
 @dataclass
 class CollectorConfig:
@@ -214,7 +221,20 @@ def build_query(query_mode: str, query_terms: list[str], raw_query: str, site_fi
         q = " ".join(terms)
     site_expr = build_site_query(site_filters)
     if site_expr and "site:" not in q.lower():
-        q = f"({q}) ({site_expr})" if (q and " OR " in site_expr) else f"{q} {site_expr}".strip()
+        # Keep Boolean term expressions and site constraints as two explicit
+        # groups.  Without grouping, e.g. ``"A" OR "B" site:x.com``, Google
+        # may interpret the site operator as applying only to the final OR arm.
+        # The intended meaning of the GUI is always:
+        #
+        #     (term expression) AND (site expression)
+        #
+        # This is especially important for Google News, where a verification
+        # round-trip can otherwise expose Google's rewritten query.
+        if q and " OR " in q:
+            q = f"({q})"
+        if " OR " in site_expr:
+            site_expr = f"({site_expr})"
+        q = f"{q} {site_expr}".strip()
     return q
 
 def google_date(d: date) -> str:
@@ -324,30 +344,62 @@ def build_search_url(cfg: CollectorConfig, shard_start: date, shard_end: date) -
         params["filter"] = "0"
     return "https://www.google.com/search?" + urlencode(params)
 
+def crawl_plan_signature(cfg: CollectorConfig) -> str:
+    """Return a stable fingerprint for the search plan relevant to resuming.
+
+    Browser paths and timing values are deliberately excluded: a resume state
+    identifies *what* is being searched and how the task/date dimensions are
+    expanded, while the current browser environment may legitimately change
+    between sessions.
+    """
+    payload = {
+        "query_mode": str(cfg.query_mode or ""),
+        "query_terms": [str(x) for x in (cfg.query_terms or [])],
+        "raw_query": str(cfg.raw_query or ""),
+        "site_filters": normalize_site_filters(list(cfg.site_filters or [])),
+        "search_vertical": str(cfg.search_vertical or ""),
+        "language_lr": str(cfg.language_lr or ""),
+        "country_cr": str(cfg.country_cr or ""),
+        "safe": str(cfg.safe or ""),
+        "disable_filter": bool(cfg.disable_filter),
+        "date_filter_enabled": bool(cfg.date_filter_enabled),
+        "start_date": cfg.start_date.isoformat(),
+        "end_date": cfg.end_date.isoformat(),
+        "day_step": int(cfg.day_step or 0),
+        "baidu_sort": str(getattr(cfg, "baidu_sort", "focus") or "focus"),
+        "or_terms_per_batch": OR_TERMS_PER_BATCH,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _term_batches(terms: list[str], size: int = OR_TERMS_PER_BATCH) -> list[list[str]]:
+    cleaned = [str(term).strip() for term in terms if str(term or "").strip()]
+    size = max(1, int(size or OR_TERMS_PER_BATCH))
+    return [cleaned[i:i + size] for i in range(0, len(cleaned), size)]
+
+
 def expand_search_tasks(cfg: CollectorConfig) -> list[CollectorConfig]:
     """Expand one panel configuration into concrete engine search tasks.
 
-    Google keeps its native query-composition semantics. Baidu is deliberately
-    conservative: WebLens never auto-generates ``OR`` to combine user-entered
-    terms or site/domain filters. In Baidu multiple-term mode each non-empty
-    term is searched separately, and each domain is searched separately. The
-    concrete task set is therefore:
+    Google OR-composed modes (``any`` and ``phrase_any``) are automatically
+    split into deterministic batches of at most :data:`OR_TERMS_PER_BATCH`
+    terms.  The limit is internal and intentionally not exposed in the GUI,
+    preventing very long OR expressions from destabilising Google Search/News.
 
-        term-task × domain-task
-
-    Date slicing remains a separate dimension handled by ``crawl()`` and by
-    manual collection. Consequently the full Baidu execution plan is:
-
-        term-task × domain-task × date-slice
-
-    The helper is shared by Automatic Collection and Manual Collection so the
-    two workflows always generate the same initial searches.
+    Baidu remains deliberately conservative: its multi-term mode searches each
+    term separately rather than generating an OR expression.  Multiple Baidu
+    domains are likewise expanded separately.  Therefore Baidu never creates a
+    long OR query and already satisfies the same safety objective.
     """
-    if not is_baidu_vertical(getattr(cfg, "search_vertical", "")):
-        return [cfg]
-
     mode = (getattr(cfg, "query_mode", "") or "").lower().strip()
     terms = [str(term).strip() for term in (getattr(cfg, "query_terms", None) or []) if str(term or "").strip()]
+
+    if not is_baidu_vertical(getattr(cfg, "search_vertical", "")):
+        if mode in {"any", "phrase_any"} and len(terms) > OR_TERMS_PER_BATCH:
+            return [replace(cfg, query_terms=batch) for batch in _term_batches(terms)]
+        return [cfg]
+
     domains = normalize_site_filters(list(getattr(cfg, "site_filters", None) or []))
     # In Raw query mode an explicit site: expression belongs to the user's raw
     # syntax. Do not multiply identical tasks by also expanding the separate
@@ -369,7 +421,6 @@ def expand_search_tasks(cfg: CollectorConfig) -> list[CollectorConfig]:
     if not term_cfgs:
         return []
 
-    # No site/domain filter means one unconstrained domain dimension.
     if not domains:
         return [replace(task, site_filters=[]) for task in term_cfgs]
 
@@ -378,7 +429,6 @@ def expand_search_tasks(cfg: CollectorConfig) -> list[CollectorConfig]:
         for domain in domains:
             tasks.append(replace(term_task, site_filters=[domain]))
     return tasks
-
 
 def split_date_range(start: date, end: date, day_step: int) -> list[tuple[date, date]]:
     """Split an inclusive date range into search slices.
@@ -527,6 +577,35 @@ def resolve_google_goto_url(
         return original
 
 
+def _merge_missing_record_metadata(preferred: SearchRecord, fallback: SearchRecord) -> SearchRecord:
+    """Fill empty display metadata on *preferred* from *fallback* in place."""
+    for attr in ("title", "source", "published_time", "snippet", "actual_domain"):
+        if not str(getattr(preferred, attr, "") or "").strip():
+            value = getattr(fallback, attr, "")
+            if value:
+                setattr(preferred, attr, value)
+    return preferred
+
+
+def deduplicate_records_by_url(records: list[SearchRecord]) -> tuple[list[SearchRecord], int]:
+    """Deduplicate records after redirect resolution and re-rank the page."""
+    out: list[SearchRecord] = []
+    seen: dict[str, int] = {}
+    removed = 0
+    for rec in records:
+        key = normalize_url_for_dedup(rec.link)
+        if key and key in seen:
+            _merge_missing_record_metadata(out[seen[key]], rec)
+            removed += 1
+            continue
+        if key:
+            seen[key] = len(out)
+        out.append(rec)
+    for rank, rec in enumerate(out, start=1):
+        rec.rank = rank
+    return out, removed
+
+
 def resolve_google_redirect_records(
     records: list[SearchRecord],
     session,
@@ -565,6 +644,7 @@ def resolve_google_redirect_records(
         if target and target != original and target.startswith(("http://", "https://")) and not is_google_host(target):
             rec.link = target
             rec.actual_domain = _actual_domain(target)
+            rec.source = primary_domain(target)
             resolved_count += 1
         else:
             retained_count += 1
@@ -926,15 +1006,25 @@ def extract_source_time_snippet(container) -> tuple[str, str, str]:
         ".MgUUmf.NUnG9d span", ".MgUUmf.NUnG9d", "span.NUnG9d", "div.CEMjEf span",
         "span.wEwyrc", "div.MgUUmf span", "span.OSrXXb", "cite",
     ], 90)
-    published = _first_text(container, [".OSrXXb", ".rbYSKb", "span.f", "span.LEwnzc"], 80)
+    # Google Web result cards currently expose the visible result date in a
+    # YrbPuc prefix inside the snippet (for example ``2 天前 —`` or
+    # ``2026年4月17日 —``).  Prefer the inner span so the separator and snippet
+    # text are not mixed into the stored publication-time value.  Keep the
+    # older selectors for News/A-B layouts.
+    published = _first_text(container, [
+        ".YrbPuc > span", ".YrbPuc span", ".OSrXXb", ".rbYSKb",
+        "span[data-ts]", "span.f", "span.LEwnzc",
+    ], 80)
     snippet = _first_text(container, [".UqSP2b", ".GI74Re", ".VwiC3b", ".IsZvec", "div.Y3v8qd"], 800)
     if not snippet:
         snippet = text[:800] if text else ""
     if not published:
         time_patterns = [
             r"\b\d+\s+(?:minutes?|hours?|days?|weeks?|months?|years?)\s+ago\b",
-            r"\b\d+\s+(?:分鐘前|小時前|天前|週前|月前|年前|分钟前|小时前|周前)\b",
-            r"\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b",
+            r"\d+\s*(?:秒|分钟|分鐘|小时|小時|天|日|周|週|个月|個月|月|年)前",
+            r"\d{4}年\d{1,2}月\d{1,2}日",
+            r"\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\b",
+            r"\b[A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4}\b",
             r"\b\d{1,2}\s+[A-Z][a-z]{2,8}\s+\d{4}\b",
         ]
         for pat in time_patterns:
@@ -945,16 +1035,13 @@ def extract_source_time_snippet(container) -> tuple[str, str, str]:
     return source, published, snippet
 
 def nearest_result_container(a_tag):
-    # News-tab results are often anchored by a.WlydOe and contain .SoAPf.
+    # Prefer a known Google result-card ancestor, then fall back to a bounded
+    # text-bearing ancestor for unfamiliar A/B layouts.
     if not a_tag:
         return None
-    for selector in ["div.SoaBEf", "div.SoaBEf", "div.lSfe4c", "div.MjjYud", "div.g", "article"]:
-        try:
-            node = a_tag.find_parent(selector)
-            if node:
-                return node
-        except Exception:
-            pass
+    card = _google_result_card_container(a_tag)
+    if card is not None:
+        return card
     node = a_tag
     best = None
     for _ in range(10):
@@ -965,7 +1052,6 @@ def nearest_result_container(a_tag):
             text = node.get_text(" ", strip=True)
             if len(text) > 30:
                 best = node
-                # Avoid climbing all the way to the whole page.
                 if len(text) > 80:
                     return node
     return best or getattr(a_tag, "parent", None) or a_tag
@@ -982,37 +1068,102 @@ def _extract_title(a_tag, container) -> str:
             return title[:500]
     return ""
 
+def _google_result_card_container(a_tag):
+    """Return a conservative structural container for one visible Google result.
+
+    The crawler treats a visible result card as the unit of extraction.  Current
+    Google pages can include Translate/read-more/tracking anchors inside the same
+    card; those auxiliary links must not become extra Result Preview items.
+    """
+    if not a_tag:
+        return None
+    try:
+        parents = a_tag.parents
+    except Exception:
+        return None
+    for node in parents:
+        name = str(getattr(node, "name", "") or "").lower()
+        if name == "article":
+            return node
+        if not hasattr(node, "get"):
+            continue
+        classes = set(node.get("class", []) or [])
+        if {"MjjYud", "SoaBEf", "lSfe4c", "g"} & classes:
+            return node
+        if node.get("data-news-doc-id") is not None:
+            return node
+    return None
+
+
+def _google_anchor_priority(a_tag) -> int:
+    """Rank a principal result anchor without using headline/source heuristics.
+
+    A direct external destination is preferred.  If a card exposes no direct
+    destination, an opaque Google /goto result link is the supported fallback and
+    will be resolved later through Google's redirect endpoint.
+    """
+    href = str(a_tag.get("href") or "") if a_tag else ""
+    target = unwrap_google_url(href)
+    if (not target or not target.startswith(("http://", "https://"))) and a_tag and a_tag.get("ping"):
+        target = unwrap_google_url(str(a_tag.get("ping") or ""))
+    if target.startswith(("http://", "https://")) and not is_google_host(target):
+        return 3
+    if is_google_news_redirect_url(target):
+        return 2
+    if target.startswith(("http://", "https://")):
+        return 1
+    return 0
+
+
 def _candidate_anchors(soup: BeautifulSoup):
-    # Ordered from most specific to broadest. This list covers the user-provided
-    # Google News HTML variant where a.WlydOe contains direct source links.
-    selectors = [
-        "a.WlydOe",             # Google News title card link
-        "a[jsname='YKoRaf']",    # Google News title link variant
-        "a[jsname='UWckNb']",    # Google web-result title link variant
-        "#rso a:has(h3)",        # normal organic web result
-        "#rso a[href]",          # resilient fallback for current Google A/B layouts
-        "div.MjjYud a[href]",    # grouped organic result container
-        "div.g a[href]",
-        "a:has(h3)",
-        "a[href^='/url?']",
-    ]
-    seen_ids = set()
+    """Yield one principal anchor per visible Google result card.
+
+    v3.2.5 deliberately avoids broad selectors such as ``#rso a[href]``.  Those
+    selectors can collect auxiliary links from a single card and turn ten visible
+    results into twenty or more records.  Specific title/result anchors are used
+    first; where two principal representations exist in one card, a direct
+    external URL wins over an opaque Google ``/goto`` URL.
+    """
+    selectors = (
+        "a.WlydOe[href]",             # Google News title-card link
+        "a[jsname='YKoRaf'][href]",    # Google News title-link variant
+        "a[jsname='UWckNb'][href]",    # Google web-result title link
+        "#rso a[href]:has(h3)",
+        "#search a[href]:has(h3)",
+        "div.MjjYud a[href]:has(h3)",
+        "div.g a[href]:has(h3)",
+    )
+
+    selected: dict[int, tuple[int, object]] = {}
+    order: list[int] = []
+    seen_nodes: set[int] = set()
+
+    def consider(a) -> None:
+        if not a or not a.get("href"):
+            return
+        ident = id(a)
+        if ident in seen_nodes:
+            return
+        seen_nodes.add(ident)
+        container = _google_result_card_container(a)
+        card_key = id(container) if container is not None else ident
+        priority = _google_anchor_priority(a)
+        if card_key not in selected:
+            selected[card_key] = (priority, a)
+            order.append(card_key)
+        elif priority > selected[card_key][0]:
+            selected[card_key] = (priority, a)
+
     for selector in selectors:
         try:
             nodes = soup.select(selector)
         except Exception:
             nodes = []
         for a in nodes:
-            ident = id(a)
-            if ident in seen_ids:
-                continue
-            seen_ids.add(ident)
-            yield a
+            consider(a)
 
-    # Keep the HTML parser aligned with the broader live-DOM readiness check
-    # used after human verification. Some Google A/B layouts place the result
-    # heading inside an anchor, while others place the anchor immediately above
-    # or below the h3 node.
+    # Some A/B layouts expose only the heading reliably.  Map the heading back to
+    # its closest anchor, but still keep one principal anchor per card.
     try:
         heading_nodes = soup.select("#search h3, #rso h3, div.MjjYud h3")
     except Exception:
@@ -1023,13 +1174,10 @@ def _candidate_anchors(soup: BeautifulSoup):
             parent = getattr(h3, "parent", None)
             if parent is not None:
                 a = parent.find("a", href=True)
-        if not a:
-            continue
-        ident = id(a)
-        if ident in seen_ids:
-            continue
-        seen_ids.add(ident)
-        yield a
+        consider(a)
+
+    for card_key in order:
+        yield selected[card_key][1]
 
 def diagnose_result_page(html: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
@@ -1183,16 +1331,106 @@ def _baidu_source_time_snippet(container, title: str = "") -> tuple[str, str, st
         snippet = snippet[:500]
     return source, published, snippet
 
+# Common second-level public suffix labels used under country-code TLDs.
+# WebLens intentionally keeps this self-contained instead of adding a runtime
+# Public Suffix List dependency.  It covers the major news/corpus domains
+# normally encountered by the application (for example people.com.cn,
+# yahoo.co.jp and bbc.co.uk).
+_COMMON_CC_SECOND_LEVEL_SUFFIXES = {
+    "ac", "ad", "asn", "biz", "co", "com", "edu", "firm",
+    "gen", "go", "gov", "id", "idv", "ind", "lg", "me",
+    "mil", "net", "ne", "nom", "or", "org", "plc", "pro",
+    "sch", "web",
+}
+
+
+def _host_from_url_or_domain(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        if "://" in text:
+            host = urlparse(text).hostname or ""
+        else:
+            candidate = text.split("/", 1)[0].strip().strip(".")
+            host = candidate.split("@")[-1].split(":", 1)[0]
+        return host.lower().strip().strip(".").removeprefix("www.")
+    except Exception:
+        return ""
+
+
+def primary_domain(value: str) -> str:
+    """Return the registrable/main domain used by the Result Preview Source field.
+
+    Examples: ``j.people.com.cn -> people.com.cn`` and
+    ``news.yahoo.co.jp -> yahoo.co.jp``. Search-engine redirect URLs intentionally
+    return an empty string because their destination domain is not yet known.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if text.startswith(("http://", "https://")):
+        if is_google_news_redirect_url(text) or is_baidu_redirect_url(text):
+            return ""
+    host = _host_from_url_or_domain(text)
+    if not host:
+        return ""
+    # IPv4 / IPv6 literals and localhost-like hosts are already atomic.
+    if host.replace(".", "").isdigit() or ":" in host or "." not in host:
+        return host
+    labels = [part for part in host.split(".") if part]
+    if len(labels) <= 2:
+        return host
+    # For common country-code namespaces such as com.cn/co.jp/co.uk, keep one
+    # additional label so the result is the registrable domain rather than the
+    # public suffix itself.
+    if len(labels[-1]) == 2 and labels[-2] in _COMMON_CC_SECOND_LEVEL_SUFFIXES:
+        return ".".join(labels[-3:])
+    return ".".join(labels[-2:])
+
+
 def _actual_domain(url: str) -> str:
     try:
         if is_google_news_redirect_url(url):
             return ""
-        host = urlparse(url).netloc.lower().lstrip("www.")
+        host = (urlparse(url).hostname or "").lower().lstrip("www.")
         if host.endswith("baidu.com") and is_baidu_redirect_url(url):
             return ""
         return host
     except Exception:
         return ""
+
+
+def _domain_from_display_text(text: str) -> str:
+    """Extract a main domain from a search engine's display-URL/breadcrumb text."""
+    value = html_lib.unescape(str(text or "")).strip()
+    if not value:
+        return ""
+    # Prefer an explicit URL such as ``https://j.people.com.cn › ...``.
+    m = re.search(r"https?://(?:www\.)?([^\s/›>]+)", value, flags=re.I)
+    if m:
+        return primary_domain(m.group(1))
+    # Fall back to a hostname-looking token only; publication names without a
+    # dot are deliberately ignored at collection/import time.
+    m = re.search(r"(?<![\w.-])((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})(?![\w.-])", value)
+    if m:
+        return primary_domain(m.group(1))
+    return ""
+
+
+def _single_site_filter_domain(site_filters: list[str] | None) -> str:
+    domains = []
+    for item in site_filters or []:
+        domain = primary_domain(str(item or "").removeprefix("site:").strip())
+        if domain and domain not in domains:
+            domains.append(domain)
+    return domains[0] if len(domains) == 1 else ""
+
+
+def result_source_domain(link: str, display_source: str = "", site_filters: list[str] | None = None) -> str:
+    """Return deterministic domain-only Source metadata before content download."""
+    return primary_domain(link) or _domain_from_display_text(display_source) or _single_site_filter_domain(site_filters)
+
 
 def _baidu_result_anchors(soup: BeautifulSoup):
     """Yield principal anchors from Baidu result cards, excluding page chrome/footer links."""
@@ -1275,7 +1513,7 @@ def extract_baidu_records_from_html(html: str, cfg: CollectorConfig, search_url:
             rank=rank,
             title=title,
             link=link,
-            source=source,
+            source=result_source_domain(link, source, cfg.site_filters),
             published_time=published,
             snippet=snippet,
             search_url=search_url,
@@ -1314,8 +1552,12 @@ def extract_records_from_html(html: str, cfg: CollectorConfig, search_url: str, 
             title = _extract_title(a, container) or target
             source, published, snippet = extract_source_time_snippet(container)
             candidates.append((title, target, source, published, snippet))
-    # Regex fallback for Google News card HTML and JS/entity-escaped variants.
-    candidates.extend(_extract_news_cards_by_regex(html))
+    # Regex parsing is a true fallback.  Running it unconditionally can add a
+    # second representation of every visible Google News card (for example a
+    # direct external URL from the rendered DOM plus the same card's opaque
+    # /goto anchor from escaped HTML), doubling a 10-result page to ~20 items.
+    if not candidates:
+        candidates.extend(_extract_news_cards_by_regex(html))
     if not candidates:
         candidates.extend(_extract_links_like_original(html, prefer_news=(cfg.search_vertical == "news"), site_filters=cfg.site_filters))
 
@@ -1342,7 +1584,7 @@ def extract_records_from_html(html: str, cfg: CollectorConfig, search_url: str, 
             rank=rank,
             title=title,
             link=link,
-            source=source,
+            source=result_source_domain(link, source, cfg.site_filters),
             published_time=published,
             snippet=snippet,
             search_url=search_url,
@@ -1359,7 +1601,6 @@ def extract_records_from_html(html: str, cfg: CollectorConfig, search_url: str, 
             date_end=shard_end.isoformat() if cfg.date_filter_enabled else "",
         ))
     return records
-
 
 
 def extract_google_records_from_live_dom(driver, cfg: CollectorConfig, search_url: str, shard_start: date, shard_end: date, page_number: int) -> list[SearchRecord]:
@@ -1389,9 +1630,33 @@ const text = (root, selectors) => {
   }
   return '';
 };
-let anchors = Array.from(document.querySelectorAll(
-  'a[jsname="YKoRaf"][href], a.WlydOe[href], a[jsname="UWckNb"][href], #rso a[href]'
+const rawAnchors = Array.from(document.querySelectorAll(
+  'a[jsname="YKoRaf"][href], a.WlydOe[href], a[jsname="UWckNb"][href], #rso a[href]:has(h3), #search a[href]:has(h3)'
 ));
+const priority = (href) => {
+  try {
+    const u = new URL(String(href || ''), window.location.href);
+    const host = String(u.hostname || '').toLowerCase();
+    const isGoogle = host === 'google.com' || host.endsWith('.google.com') || /(^|\.)google\.[a-z.]+$/.test(host);
+    if (!isGoogle) return 3;
+    if (u.pathname === '/goto' && u.searchParams.get('url')) return 2;
+    return 1;
+  } catch (_) { return 0; }
+};
+const selected = new Map();
+const order = [];
+for (const a of rawAnchors) {
+  if (!visible(a)) continue;
+  const card = a.closest('.MjjYud,.SoaBEf,.lSfe4c,.g,article,[data-news-doc-id]') || a;
+  const score = priority(a.href);
+  if (!selected.has(card)) {
+    selected.set(card, {score, a});
+    order.push(card);
+  } else if (score > selected.get(card).score) {
+    selected.set(card, {score, a});
+  }
+}
+const anchors = order.map(card => selected.get(card).a);
 const seen = new Set();
 const out = [];
 for (const a of anchors) {
@@ -1411,7 +1676,7 @@ for (const a of anchors) {
     href,
     title: title || (a.innerText || '').trim().replace(/\s+/g, ' '),
     source: text(root, ['.MgUUmf.NUnG9d span', '.MgUUmf.NUnG9d', '.MgUUmf span', 'span.NUnG9d', 'cite']),
-    published: text(root, ['.OSrXXb', '.rbYSKb', 'span[data-ts]', 'span.f', 'span.LEwnzc']),
+    published: text(root, ['.YrbPuc > span', '.YrbPuc span', '.OSrXXb', '.rbYSKb', 'span[data-ts]', 'span.f', 'span.LEwnzc']),
     snippet: text(root, ['.UqSP2b', '.GI74Re', '.VwiC3b', '.IsZvec', 'div.Y3v8qd'])
   });
 }
@@ -1451,7 +1716,7 @@ return out;
             rank=len(records) + 1,
             title=title,
             link=link,
-            source=source,
+            source=result_source_domain(link, source, cfg.site_filters),
             published_time=published,
             snippet=snippet,
             search_url=search_url,
@@ -1468,8 +1733,6 @@ return out;
             date_end=shard_end.isoformat() if cfg.date_filter_enabled else "",
         ))
     return records
-
-
 
 
 
@@ -1667,11 +1930,6 @@ def create_selenium_driver(cfg: CollectorConfig):
     return webdriver.Chrome(options=options)
 
 
-MANUAL_VERIFICATION_POLL_SECONDS = 2.0
-MANUAL_VERIFICATION_LOG_SECONDS = 15.0
-MANUAL_VERIFICATION_CLEAR_CONFIRMATIONS = 2
-
-
 def _selenium_page_snapshot(driver, fallback_url: str = "") -> tuple[str, str]:
     """Read the currently displayed browser page without navigating anywhere.
 
@@ -1691,70 +1949,6 @@ def _selenium_page_snapshot(driver, fallback_url: str = "") -> tuple[str, str]:
         html_text = driver.page_source or ""
     current_url = getattr(driver, "current_url", fallback_url) or fallback_url
     return html_text, current_url
-
-
-def _live_result_dom_state(driver, vertical: str) -> dict:
-    """Inspect the browser's live DOM without navigation.
-
-    This is intentionally broader than the HTML parser used to build final
-    records. Its only job is to decide whether a real search-result page is
-    visibly present after a CAPTCHA/verification flow.
-    """
-    is_baidu = is_baidu_vertical(vertical)
-    script = r'''
-const isBaidu = arguments[0];
-const visible = (el) => {
-  if (!el) return false;
-  const st = window.getComputedStyle(el);
-  if (!st || st.display === 'none' || st.visibility === 'hidden') return false;
-  const r = el.getBoundingClientRect();
-  return r.width > 0 && r.height > 0;
-};
-const absHref = (a) => {
-  try { return a && a.href ? String(a.href) : ''; } catch(e) { return ''; }
-};
-let headings = [];
-let anchors = [];
-if (isBaidu) {
-  headings = Array.from(document.querySelectorAll('div.result h3, div.c-container h3, h3.t'));
-  anchors = Array.from(document.querySelectorAll('div.result h3 a[href], div.c-container h3 a[href], a.c-title[href]'));
-} else {
-  headings = Array.from(document.querySelectorAll('#search h3, #rso h3, div.MjjYud h3'));
-  anchors = Array.from(document.querySelectorAll('a[jsname=\"UWckNb\"][href], a.WlydOe[href], a[jsname=\"YKoRaf\"][href]'));
-  for (const h of headings) {
-    const a = h.closest('a[href]') || h.querySelector('a[href]') || (h.parentElement && h.parentElement.closest ? h.parentElement.closest('a[href]') : null);
-    if (a) anchors.push(a);
-  }
-}
-headings = headings.filter(visible);
-anchors = anchors.filter(visible);
-const hrefs = [];
-const seen = new Set();
-for (const a of anchors) {
-  const href = absHref(a);
-  if (!href || seen.has(href)) continue;
-  seen.add(href);
-  hrefs.push(href);
-}
-return {
-  visible_headings: headings.length,
-  principal_links: hrefs.length,
-  sample_links: hrefs.slice(0, 5),
-  ready_state: document.readyState || ''
-};
-'''
-    try:
-        state = driver.execute_script(script, bool(is_baidu)) or {}
-        if not isinstance(state, dict):
-            state = {}
-    except Exception:
-        state = {}
-    return {
-        "visible_headings": int(state.get("visible_headings", 0) or 0),
-        "principal_links": int(state.get("principal_links", 0) or 0),
-        "sample_links": list(state.get("sample_links", []) or []),
-        "ready_state": str(state.get("ready_state", "") or ""),
-    }
 
 
 def looks_like_baidu_verification_html(html: str, final_url: str = "") -> bool:
@@ -1787,137 +1981,66 @@ def looks_like_engine_verification(html: str, final_url: str, vertical: str) -> 
     return looks_like_google_block_html(html, final_url)
 
 
-def _has_explicit_no_result_state(html_text: str, vertical: str) -> bool:
-    """Return True only for an explicit engine no-result message.
-
-    A normal ``/search`` URL or a large HTML document is *not* sufficient.
-    Immediately after a CAPTCHA is cleared Google can expose the search shell
-    several seconds before the result cards are inserted into the DOM. Treating
-    that transient shell as a completed page caused WebLens to parse zero links
-    and terminate an otherwise valid collection task.
-    """
-    lower = (html_text or "").lower()
-    markers = (
-        "did not match any documents",
-        "no results found",
-        "your search did not match any documents",
-        "找不到和您查询",
-        "找不到和您查詢",
-        "没有任何结果",
-        "沒有任何結果",
-        "抱歉没有找到",
-        "抱歉，未找到",
-        "没有找到相关结果",
-        "未找到相关结果",
-    )
-    return any(marker in lower for marker in markers)
-
-
-def _page_has_normal_search_state(html_text: str, current_url: str, vertical: str) -> bool:
-    """Return True only when the post-verification search page is *ready*.
-
-    Readiness deliberately requires a real result-card URL (or an explicit
-    engine no-result message). Merely returning to Google/Baidu's search URL is
-    not enough because both engines can render an intermediate shell first.
-    """
-    if looks_like_engine_verification(html_text, current_url, vertical):
-        return False
-    if count_external_result_candidates(html_text, vertical) > 0:
-        return True
-    return _has_explicit_no_result_state(html_text, vertical)
-
-
 def wait_for_manual_verification(
     driver,
     cfg: CollectorConfig,
     stop_checker: Callable[[], bool] | None = None,
     page_number: int | None = None,
     initial_url: str = "",
+    verification_waiter: Callable[[], bool] | None = None,
 ):
-    """Wait for the user to complete a browser verification challenge.
+    """Pause until the user explicitly confirms that manual verification is complete.
 
-    While verification remains present WebLens performs no navigation action:
-    it does not call ``get()``, ``refresh()``, click Next, restart the browser,
-    or open another URL. It only reads the already-open page so it can detect
-    when the user has completed the challenge. Once the normal search page is
-    stable for two polls, parsing resumes *without refreshing the page*.
+    WebLens deliberately performs *no browser polling or navigation* while the
+    verification dialog is open.  The collection worker blocks on the UI's
+    confirmation signal.  Only after the user clicks the explicit continue
+    button does WebLens read the page that is already open in the browser.
+
+    If that page still looks like a verification page, WebLens pauses again and
+    asks for another explicit confirmation.  It never refreshes the page,
+    restores a URL, or checks/forces a Google search vertical here.
     """
-    poll_seconds = MANUAL_VERIFICATION_POLL_SECONDS
-    poll_ms = int(poll_seconds * 1000)
     page_hint = f" on page {page_number}" if page_number else ""
-    yield CrawlEvent(
-        "verification_wait",
-        f"Human verification detected{page_hint}. Collection is paused on the current browser page. "
-        "Complete the verification manually. WebLens will not refresh, paginate, restart the browser, "
-        "or open another page while verification remains active.",
-        data={"page_number": page_number, "url": initial_url, "poll_seconds": poll_seconds},
-    )
-    clear_streak = 0
-    verification_cleared_seen = False
-    last_heartbeat = time.monotonic()
     while True:
         if stop_checker and stop_checker():
             raise StopCrawl()
+        yield CrawlEvent(
+            "verification_wait",
+            f"Human verification detected{page_hint}. Collection is fully paused. "
+            "Complete the verification manually in the browser, then return to WebLens and explicitly confirm before collection resumes. "
+            "While waiting for your confirmation WebLens does not inspect, refresh, paginate, restart, or navigate the browser.",
+            data={"page_number": page_number, "url": initial_url},
+        )
+
+        if verification_waiter is None:
+            raise NetworkAccessError(
+                "Human verification requires explicit user confirmation, but no confirmation handler is available."
+            )
+        confirmed = bool(verification_waiter())
+        if not confirmed or (stop_checker and stop_checker()):
+            raise StopCrawl()
+
         try:
             html_text, current_url = _selenium_page_snapshot(driver, initial_url)
         except Exception as exc:
             raise NetworkAccessError(
-                "The collection browser was closed or became unavailable while waiting for human verification."
+                "The collection browser was closed or became unavailable after human verification."
             ) from exc
-        live_state = _live_result_dom_state(driver, cfg.search_vertical)
-        live_result_count = max(
-            int(live_state.get("visible_headings", 0) or 0),
-            int(live_state.get("principal_links", 0) or 0),
+
+        if looks_like_engine_verification(html_text, current_url, cfg.search_vertical):
+            yield CrawlEvent(
+                "log",
+                f"Verification is still detected{page_hint} after user confirmation. WebLens remains paused and will ask for confirmation again.",
+            )
+            initial_url = current_url or initial_url
+            continue
+
+        yield CrawlEvent(
+            "verification_passed",
+            "User confirmed that human verification is complete. WebLens will parse the page currently open in the browser without refreshing or restoring the search URL.",
+            data={"page_number": page_number, "url": current_url},
         )
-        parsed_candidate_count = count_external_result_candidates(html_text, cfg.search_vertical)
-        explicit_no_result = _has_explicit_no_result_state(html_text, cfg.search_vertical)
-
-        # Result-first priority: once the live browser visibly contains real
-        # search-result headings/links, stale CAPTCHA strings or scripts in the
-        # HTML must not keep WebLens trapped in the verification wait loop.
-        verification_active = looks_like_engine_verification(html_text, current_url, cfg.search_vertical)
-        if live_result_count > 0 or parsed_candidate_count > 0:
-            verification_active = False
-
-        if not verification_active and not verification_cleared_seen:
-            verification_cleared_seen = True
-            yield CrawlEvent(
-                "log",
-                f"Human-verification page has cleared{page_hint}. Waiting for the real search-result DOM to become stable before resuming.",
-            )
-
-        normal_ready = (live_result_count > 0) or (parsed_candidate_count > 0) or explicit_no_result
-        if not verification_active and normal_ready:
-            clear_streak += 1
-        else:
-            clear_streak = 0
-
-        if clear_streak >= MANUAL_VERIFICATION_CLEAR_CONFIRMATIONS:
-            html_text, current_url = _selenium_page_snapshot(driver, current_url)
-            yield CrawlEvent(
-                "verification_passed",
-                "Human verification completed and the live search-result DOM is stable. Collection will resume from the page already open in the browser.",
-                data={
-                    "page_number": page_number,
-                    "url": current_url,
-                    "live_results": live_result_count,
-                    "parsed_candidates": parsed_candidate_count,
-                },
-            )
-            return html_text, current_url
-        now = time.monotonic()
-        if now - last_heartbeat >= MANUAL_VERIFICATION_LOG_SECONDS:
-            phase = "verification challenge still detected" if verification_active else "verification cleared; waiting for result DOM"
-            yield CrawlEvent(
-                "log",
-                f"Verification wait{page_hint}: {phase}; live_results={live_result_count}, "
-                f"parsed_candidates={parsed_candidate_count}, explicit_no_result={explicit_no_result}, "
-                f"ready_state={live_state.get('ready_state','')}, url={current_url}. "
-                "No browser navigation has been sent.",
-            )
-            last_heartbeat = now
-        sleep_random_ms(poll_ms, poll_ms, stop_checker)
-
+        return html_text, current_url
 
 def fetch_html_with_selenium(driver, url: str, cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) -> tuple[str, str]:
     """Load one search-result page in the selected collection browser."""
@@ -2049,24 +2172,37 @@ def count_external_result_candidates(html_text: str, vertical: str) -> int:
     return len(seen)
 
 
-def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) -> Iterable[CrawlEvent]:
+def crawl(
+    cfg: CollectorConfig,
+    stop_checker: Callable[[], bool] | None = None,
+    *,
+    resume_state: dict | None = None,
+    existing_links: Iterable[str] | None = None,
+    verification_waiter: Callable[[], bool] | None = None,
+) -> Iterable[CrawlEvent]:
     """Collect search results only through a real Chrome/Edge browser.
 
-    Pagination is engine-led: WebLens loads the initial query without page-size
-    or maximum-page parameters and then follows the engine's own Next link until
-    that link disappears or a genuine empty result page is reached. There is no
-    software-side page-count ceiling.
+    Pagination is engine-led.  For Google OR queries WebLens first expands the
+    search into fixed internal batches of at most eight terms.  Baidu keeps its
+    established one-term-at-a-time multi-term behaviour.
 
-    Baidu is deliberately different from Google: each term in multiple-term
-    mode and each site/domain filter becomes an independent task dimension.
-    WebLens fully traverses one concrete Baidu term/domain task before moving
-    to the next and never auto-generates OR to combine those dimensions.
+    ``resume_state`` is an optional checkpoint embedded in a WebLens result
+    file.  When present, WebLens skips search units that were already reached
+    and reopens the *previous* result page for the interrupted unit (or page 1
+    when no previous page exists).  ``existing_links`` seeds global
+    deduplication so replaying that safety page never duplicates Result Preview.
     """
     fetch_backend = (getattr(cfg, "fetch_backend", "selenium_chrome") or "selenium_chrome").lower()
     if fetch_backend not in {"selenium_chrome", "selenium_edge"}:
         raise BrowserStartupError("Search collection supports only Chrome or Edge browser mode.")
 
+    plan_signature = crawl_plan_signature(cfg)
     seen_global: set[str] = set()
+    for link in existing_links or []:
+        key = normalize_url_for_dedup(str(link or ""))
+        if key:
+            seen_global.add(key)
+
     driver = None
     google_redirect_session = None
     google_redirect_cache: dict[str, str] = {}
@@ -2074,11 +2210,38 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
 
     is_baidu = is_baidu_vertical(getattr(cfg, "search_vertical", ""))
     search_tasks = expand_search_tasks(cfg)
-    baidu_sequential = is_baidu and len(search_tasks) > 1
-
     if not search_tasks:
-        yield CrawlEvent("done", "No search terms were provided.")
+        yield CrawlEvent("done", "No search terms were provided.", data={"status": "completed", "plan_signature": plan_signature})
         return
+
+    if cfg.date_filter_enabled:
+        base_date_slices = split_date_range(cfg.start_date, cfg.end_date, cfg.day_step)
+    else:
+        today = date.today()
+        base_date_slices = [(today, today)]
+
+    # Validate and unpack a resume checkpoint before opening the browser.
+    resume_progress: dict = {}
+    resume_pending = False
+    resume_task_index = 1
+    resume_slice_index = 1
+    if isinstance(resume_state, dict):
+        saved_signature = str(resume_state.get("plan_signature") or "")
+        if saved_signature and saved_signature != plan_signature:
+            raise ValueError("The saved collection state does not match the current search plan. Import/restore the original WebLens result file before continuing.")
+        candidate = resume_state.get("progress")
+        if isinstance(candidate, dict) and candidate:
+            resume_progress = dict(candidate)
+            try:
+                resume_task_index = int(resume_progress.get("task_index") or 1)
+                resume_slice_index = int(resume_progress.get("slice_index") or 1)
+            except Exception:
+                raise ValueError("The saved collection checkpoint is invalid.")
+            if not (1 <= resume_task_index <= len(search_tasks)):
+                raise ValueError("The saved collection checkpoint refers to a search batch that no longer exists.")
+            if not (1 <= resume_slice_index <= len(base_date_slices)):
+                raise ValueError("The saved collection checkpoint refers to a date slice that no longer exists.")
+            resume_pending = True
 
     yield CrawlEvent("log", "Collection browser User-Agent is not overridden; WebLens uses the selected Chrome/Edge browser default.")
     yield CrawlEvent("log", f"Collection browser: {backend_name}")
@@ -2086,16 +2249,31 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
     yield CrawlEvent("log", "Page size and maximum page count are controlled by the search engine. WebLens sends neither setting.")
     yield CrawlEvent("log", "Pagination follows the search engine's own Next link; WebLens does not calculate page offsets.")
     yield CrawlEvent("log", "Page, slice-transition, and transient-error waits all use the same page-delay range.")
+
+    original_term_count = len([t for t in (getattr(cfg, "query_terms", None) or []) if str(t or "").strip()])
+    mode = (getattr(cfg, "query_mode", "") or "").lower().strip()
+    if not is_baidu and mode in {"any", "phrase_any"} and original_term_count > OR_TERMS_PER_BATCH:
+        yield CrawlEvent(
+            "log",
+            f"OR query safety batching: {original_term_count} search term(s) -> {len(search_tasks)} batch(es), with at most {OR_TERMS_PER_BATCH} terms per batch. This limit is fixed internally.",
+        )
     if is_baidu:
-        term_count = len([t for t in (getattr(cfg, "query_terms", None) or []) if str(t or "").strip()])
         domain_count = len(normalize_site_filters(list(getattr(cfg, "site_filters", None) or [])))
-        if baidu_sequential:
+        if len(search_tasks) > 1:
             yield CrawlEvent(
                 "log",
-                f"Baidu task expansion: {len(search_tasks)} concrete term/domain task(s) will be searched sequentially; WebLens will not join multiple user terms/domains with OR."
+                f"Baidu task expansion: {len(search_tasks)} concrete term/domain task(s) will be searched sequentially; WebLens will not join multiple user terms/domains with OR.",
             )
-        elif term_count or domain_count:
+        elif original_term_count or domain_count:
             yield CrawlEvent("log", "Baidu query uses at most one active site/domain filter per concrete search task.")
+
+    if seen_global:
+        yield CrawlEvent("log", f"Resume deduplication seeded with {len(seen_global)} link(s) already present in Result Preview.")
+    if resume_pending:
+        yield CrawlEvent(
+            "log",
+            f"Resume checkpoint loaded: search task {resume_task_index}/{len(search_tasks)}, date slice {resume_slice_index}/{len(base_date_slices)}. WebLens will restart from the previous result page when available.",
+        )
 
     def start_selenium_driver(page_number: int | None = None):
         try:
@@ -2108,6 +2286,42 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                 "The browser and WebDriver configuration is shared by all search-engine collectors. "
                 "If vendor download access is unavailable, use the official download buttons in that settings dialog."
             ) from exc
+
+    def checkpoint_data(
+        *,
+        task_index: int,
+        task_cfg: CollectorConfig,
+        slice_index: int,
+        shard_start: date,
+        shard_end: date,
+        page_number: int,
+        current_url: str,
+        previous_page_url: str,
+        next_url: str = "",
+        phase: str = "loading",
+    ) -> dict:
+        # Replaying one page is intentional: it protects against records that
+        # were visible in the browser but had not yet reached the GUI/file when
+        # the process was stopped. Existing preview URLs are globally deduped.
+        resume_url = previous_page_url or current_url
+        resume_page = max(1, page_number - 1) if previous_page_url else max(1, page_number)
+        return {
+            "plan_signature": plan_signature,
+            "phase": phase,
+            "task_index": task_index,
+            "task_total": len(search_tasks),
+            "slice_index": slice_index,
+            "slice_total": len(base_date_slices),
+            "shard_start": shard_start.isoformat(),
+            "shard_end": shard_end.isoformat(),
+            "page_number": int(page_number),
+            "current_url": str(current_url or ""),
+            "previous_page_url": str(previous_page_url or ""),
+            "next_url": str(next_url or ""),
+            "resume_url": str(resume_url or ""),
+            "resume_page_number": int(resume_page),
+            "query": build_query(task_cfg.query_mode, task_cfg.query_terms, task_cfg.raw_query, task_cfg.site_filters),
+        }
 
     try:
         resolved_driver = resolve_driver_path(cfg, fetch_backend)
@@ -2135,47 +2349,51 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                 google_redirect_session = None
 
         if cfg.date_filter_enabled:
-            base_date_slices = split_date_range(cfg.start_date, cfg.end_date, cfg.day_step)
             yield CrawlEvent("log", f"Date restriction enabled. Date slices per search task: {len(base_date_slices)}")
         else:
-            today = date.today()
-            base_date_slices = [(today, today)]
             yield CrawlEvent("log", "No date restriction: WebLens sends no date-range parameter to the search engine.")
 
         total_units = max(1, len(search_tasks) * len(base_date_slices))
-        global_unit_index = 0
-        terminate_all = False
 
         for query_index, task_cfg in enumerate(search_tasks, start=1):
+            if resume_pending and query_index < resume_task_index:
+                continue
             if stop_checker and stop_checker():
                 raise StopCrawl()
             query_label = build_query(task_cfg.query_mode, task_cfg.query_terms, task_cfg.raw_query, task_cfg.site_filters)
-            if baidu_sequential:
-                yield CrawlEvent("log", f"Baidu search task [{query_index}/{len(search_tasks)}]: {query_label}")
+            if len(search_tasks) > 1:
+                engine_label = "Baidu search task" if is_baidu else "Google OR batch"
+                yield CrawlEvent("log", f"{engine_label} [{query_index}/{len(search_tasks)}]: {query_label}")
 
             for slice_index, (shard_start, shard_end) in enumerate(base_date_slices, start=1):
+                if resume_pending and query_index == resume_task_index and slice_index < resume_slice_index:
+                    continue
                 if stop_checker and stop_checker():
                     raise StopCrawl()
-                global_unit_index += 1
-                if task_cfg.date_filter_enabled:
-                    slice_text = f"{shard_start} ~ {shard_end}"
-                else:
-                    slice_text = "No date restriction"
-                if baidu_sequential:
+
+                global_unit_index = (query_index - 1) * len(base_date_slices) + slice_index
+                slice_text = f"{shard_start} ~ {shard_end}" if task_cfg.date_filter_enabled else "No date restriction"
+                if len(search_tasks) > 1:
                     slice_message = f"[{query_index}/{len(search_tasks)}] {query_label} · {slice_text}"
                 else:
-                    slice_message = (
-                        f"[{slice_index}/{len(base_date_slices)}] {slice_text}"
-                        if task_cfg.date_filter_enabled else slice_text
-                    )
-                yield CrawlEvent(
-                    "slice",
-                    slice_message,
-                    data={"slice_index": global_unit_index, "slice_total": total_units},
-                )
+                    slice_message = f"[{slice_index}/{len(base_date_slices)}] {slice_text}" if task_cfg.date_filter_enabled else slice_text
+                yield CrawlEvent("slice", slice_message, data={"slice_index": global_unit_index, "slice_total": total_units})
 
-                current_url = build_search_url(task_cfg, shard_start, shard_end)
-                page_number = 1
+                is_resume_unit = resume_pending and query_index == resume_task_index and slice_index == resume_slice_index
+                initial_url = build_search_url(task_cfg, shard_start, shard_end)
+                if is_resume_unit:
+                    current_url = str(resume_progress.get("resume_url") or initial_url)
+                    try:
+                        page_number = max(1, int(resume_progress.get("resume_page_number") or 1))
+                    except Exception:
+                        page_number = 1
+                    yield CrawlEvent("log", f"Continuing from safety page {page_number} of the interrupted search unit.")
+                    resume_pending = False
+                else:
+                    current_url = initial_url
+                    page_number = 1
+
+                previous_page_url = ""
                 seen_page_signatures: set[tuple[str, ...]] = set()
                 visited_page_urls: set[str] = set()
 
@@ -2187,6 +2405,22 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                         yield CrawlEvent("log", "The search engine returned a previously visited pagination URL. Stop the current search unit to avoid a loop.")
                         break
                     visited_page_urls.add(normalized_page_url)
+
+                    yield CrawlEvent(
+                        "checkpoint",
+                        f"Checkpoint before page {page_number}",
+                        data=checkpoint_data(
+                            task_index=query_index,
+                            task_cfg=task_cfg,
+                            slice_index=slice_index,
+                            shard_start=shard_start,
+                            shard_end=shard_end,
+                            page_number=page_number,
+                            current_url=current_url,
+                            previous_page_url=previous_page_url,
+                            phase="loading",
+                        ),
+                    )
                     yield CrawlEvent("log", f"Loading result page {page_number} using the search engine's current default pagination.")
 
                     try:
@@ -2215,6 +2449,7 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                             stop_checker=stop_checker,
                             page_number=page_number,
                             initial_url=final_url,
+                            verification_waiter=verification_waiter,
                         )
                         yield CrawlEvent("log", f"Resuming page {page_number} after human verification.")
 
@@ -2244,27 +2479,37 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                                 cache=google_redirect_cache,
                                 stop_checker=stop_checker,
                             )
+                            page_records, post_redirect_duplicates = deduplicate_records_by_url(page_records)
                             yield CrawlEvent(
                                 "log",
                                 f"Google News redirect normalization on page {page_number}: "
                                 f"{resolved_count}/{goto_count} /goto link(s) converted to direct destination URLs"
-                                + (f"; {retained_count} retained as fallback because Google did not return a usable redirect target." if retained_count else "."),
+                                + (f"; {retained_count} retained as fallback because Google did not return a usable redirect target." if retained_count else ".")
+                                + (f"; {post_redirect_duplicates} duplicate record(s) removed after redirect resolution." if post_redirect_duplicates else ""),
                             )
 
                     if not page_records and candidate_count == 0:
                         debug_path = save_debug_html_if_needed(task_cfg, html_text, shard_start, shard_end, page_number)
                         msg = f" Debug HTML saved to: {debug_path}." if debug_path else ""
-                        if is_baidu:
-                            yield CrawlEvent(
-                                "log",
-                                f"Result page {page_number} contains no usable search-result links. Current Baidu search unit is complete; continue with the next date slice or term/domain task if any.{msg}",
-                            )
-                        else:
-                            yield CrawlEvent(
-                                "log",
-                                f"Result page {page_number} contains no usable search-result links. Stop the collection task immediately.{msg}",
-                            )
-                            terminate_all = True
+                        yield CrawlEvent(
+                            "log",
+                            f"Result page {page_number} contains no usable search-result links. Current search unit is complete; continue with the next date slice/search batch if any.{msg}",
+                        )
+                        yield CrawlEvent(
+                            "checkpoint",
+                            f"Checkpoint after empty page {page_number}",
+                            data=checkpoint_data(
+                                task_index=query_index,
+                                task_cfg=task_cfg,
+                                slice_index=slice_index,
+                                shard_start=shard_start,
+                                shard_end=shard_end,
+                                page_number=page_number,
+                                current_url=current_url,
+                                previous_page_url=previous_page_url,
+                                phase="page_complete",
+                            ),
+                        )
                         break
 
                     if not page_records and candidate_count > 0:
@@ -2274,6 +2519,21 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                             "log",
                             f"Page {page_number} contains {candidate_count} usable result-link candidate(s), but none could be converted into valid records. "
                             f"Stop this search unit rather than treating search-engine UI links as results.{msg}",
+                        )
+                        yield CrawlEvent(
+                            "checkpoint",
+                            f"Checkpoint after unparsable page {page_number}",
+                            data=checkpoint_data(
+                                task_index=query_index,
+                                task_cfg=task_cfg,
+                                slice_index=slice_index,
+                                shard_start=shard_start,
+                                shard_end=shard_end,
+                                page_number=page_number,
+                                current_url=current_url,
+                                previous_page_url=previous_page_url,
+                                phase="page_complete",
+                            ),
                         )
                         break
 
@@ -2295,6 +2555,22 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                     yield CrawlEvent("log", f"Page {page_number}: {len(page_records)} valid records, {new_count} new after global deduplication.")
 
                     next_url = find_engine_next_page_url(html_text, final_url or current_url, task_cfg.search_vertical)
+                    yield CrawlEvent(
+                        "checkpoint",
+                        f"Checkpoint after page {page_number}",
+                        data=checkpoint_data(
+                            task_index=query_index,
+                            task_cfg=task_cfg,
+                            slice_index=slice_index,
+                            shard_start=shard_start,
+                            shard_end=shard_end,
+                            page_number=page_number,
+                            current_url=current_url,
+                            previous_page_url=previous_page_url,
+                            next_url=next_url,
+                            phase="page_complete",
+                        ),
+                    )
                     if not next_url:
                         yield CrawlEvent("log", "The search engine did not provide another result-page link. Current search unit is complete.")
                         break
@@ -2303,24 +2579,19 @@ def crawl(cfg: CollectorConfig, stop_checker: Callable[[], bool] | None = None) 
                         break
 
                     sleep_random_ms(task_cfg.page_delay_min_ms, task_cfg.page_delay_max_ms, stop_checker)
+                    previous_page_url = current_url
                     current_url = next_url
                     page_number += 1
-
-                if terminate_all:
-                    break
 
                 if slice_index < len(base_date_slices):
                     yield CrawlEvent("log", "Waiting before the next date slice using the same page-delay range.")
                     sleep_random_ms(task_cfg.page_delay_min_ms, task_cfg.page_delay_max_ms, stop_checker)
 
-            if terminate_all:
-                yield CrawlEvent("log", "Collection ended because the browser returned a genuine empty search-result page.")
-                break
-            if baidu_sequential and query_index < len(search_tasks):
-                yield CrawlEvent("log", "Current Baidu term/domain task is complete. Waiting with the normal page-delay range before the next task.")
+            if query_index < len(search_tasks):
+                yield CrawlEvent("log", "Current search task is complete. Waiting with the normal page-delay range before the next search batch/task.")
                 sleep_random_ms(task_cfg.page_delay_min_ms, task_cfg.page_delay_max_ms, stop_checker)
 
-        yield CrawlEvent("done", "Crawl finished.")
+        yield CrawlEvent("done", "Crawl finished.", data={"status": "completed", "plan_signature": plan_signature})
     finally:
         if google_redirect_session is not None:
             try:

@@ -69,8 +69,10 @@ from ..collector import (
     NetworkAccessError,
     StopCrawl,
     crawl,
+    crawl_plan_signature,
     is_google_news_redirect_url,
     normalize_url_for_dedup,
+    primary_domain,
     split_text_terms,
 )
 from ..browser_manager import (
@@ -113,8 +115,9 @@ from ..data import (
     VERTICAL_OPTIONS,
     label_for,
 )
+from ..crawl_state import CRAWL_STATE_VERSION, copy_state, now_iso as crawl_state_now_iso, state_to_json
 from ..exporter import export_import_template, export_records
-from ..importer import import_records, import_urls_from_text
+from ..importer import import_records_with_state, import_urls_from_text
 from ..manual_collection import generate_manual_search_tasks, parse_saved_search_page
 from ..resources import apply_window_icon, resource_path
 from ..timing_utils import milliseconds_to_ui_seconds, ui_seconds_to_milliseconds
@@ -128,6 +131,33 @@ DEFAULT_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/152.0.0.0 Safari/537.36"
 )
+
+
+def _detected_source_label(result: Any) -> str:
+    """Return the best human-readable source label found during content download.
+
+    Search/import stages intentionally use the main domain as Source.  Only
+    destination-page metadata is allowed to replace that fallback with a
+    publication/site/organization name. URL-like metadata values are ignored
+    so the field does not regress to a display URL or breadcrumb.
+    """
+    def get(name: str) -> str:
+        value = getattr(result, name, "") if not isinstance(result, dict) else result.get(name, "")
+        return " ".join(str(value or "").split()).strip()
+
+    for name in ("source_name", "publication", "site_name", "publisher", "organization"):
+        value = get(name)
+        if not value or len(value) > 160:
+            continue
+        low = value.lower()
+        if low.startswith(("http://", "https://")) or "/" in value or "\\" in value:
+            continue
+        # A bare hostname is not an identified publication name; the caller
+        # will use primary_domain(final_url) as the explicit fallback instead.
+        if value.lower() == primary_domain(value).lower() and "." in value and " " not in value:
+            continue
+        return value
+    return ""
 
 
 UI_TEXTS: dict[str, dict[str, str]] = {
@@ -156,7 +186,8 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "edge_system_ready": "System-installed Microsoft Edge detected. WebLens will verify or prepare the matching EdgeDriver before collection.",
         "sort_by": "Sort by",
         "sort_none": "Original order",
-        "start": "Start collection",
+        "start": "Start new collection",
+        "continue_collection": "Continue previous collection",
         "stop": "Stop",
         "export": "Export",
         "import": "Import links",
@@ -171,7 +202,7 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "manual_collection_title": "Manual search-result collection",
         "manual_intro": "Use the current search parameters to generate search-engine URLs. Open them in your normal browser, page through results manually, and save each result page as an HTML file. Then import those saved pages here; WebLens extracts result links and appends them to the current Result Preview. This mode does not require Selenium or a WebDriver.",
         "manual_urls_group": "1. Generated search URLs",
-        "manual_urls_note": "Each item is an initial search URL. For Baidu, multiple terms and multiple site/domain filters are expanded into separate term × domain tasks; enabled date slicing adds another task dimension. Pagination is manual: follow the search engine's own Next/next-page control in your browser.",
+        "manual_urls_note": "Each item is an initial search URL. In Google OR modes, more than eight terms are automatically split into fixed internal batches of at most eight; Baidu multiple-term/domain input is expanded into separate term × domain tasks. Enabled date slicing adds another task dimension. Pagination is manual: follow the search engine's own Next/next-page control in your browser.",
         "manual_copy_selected": "Copy selected URL",
         "manual_copy_all": "Copy all URLs",
         "manual_copied": "Copied {n} URL(s) to the clipboard.",
@@ -187,6 +218,11 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "clear": "Clear",
         "open_output": "Open output",
         "open_download": "Open download folder",
+        "reset_collection": "Reset collection",
+        "confirm_reset_collection": "Reset the current search-engine collection? This clears Result Preview, collection checkpoint, query/collection/language-region settings, collected-link output settings and content-download settings for this panel. Browser/Selenium configuration and files already saved on disk are not deleted.",
+        "resume_unavailable": "No resumable collection state is available. Start a new collection or import a WebLens result file that contains crawl state.",
+        "resume_state_restored": "Resumable collection state restored from: {path}",
+        "resume_state_mismatch": "The current search parameters no longer match the saved collection state. WebLens restored the saved search parameters before continuing.",
         "exit": "Exit",
         "undo": "Undo result edit",
         "redo": "Redo result edit",
@@ -268,6 +304,8 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "content_note": "Search-result collection is browser-only. The Requests options below apply only to downloading already collected destination webpages, not to Google/Baidu result-page collection.",
         "open_link": "Open link",
         "delete_selected": "Delete selected",
+        "delete_all_results": "Delete all",
+        "confirm_delete_all_results": "Delete all items from the current Result Preview? Search settings, collection settings, crawl checkpoint and files already saved on disk will not be changed. You can still use Undo immediately afterwards.",
         "sort_time": "Sort by time",
         "sort_title": "Sort by title",
         "sort_source": "Sort by source",
@@ -296,7 +334,8 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "invalid_number": "Please check the numeric settings.",
         "invalid_output": "Please choose an output file.",
         "verification_title": "Human verification required",
-        "verification_message": "The collection browser is showing a human-verification page. WebLens has paused and will not refresh, paginate, restart the browser, or open another page while verification remains active. Complete the verification manually in the browser. You may then close this message. WebLens resumes automatically only after it detects that the real search-result page has finished rendering; simply returning to the search URL is not treated as completion.",
+        "verification_message": "The collection browser is showing a human-verification page. WebLens is fully paused and will not inspect, refresh, paginate, restart, or navigate the browser while this dialog remains open. Complete the verification manually in the browser. After the result page is visibly ready, return to WebLens and click ‘Verification complete, continue’. Only then will WebLens read the page currently open in the browser and resume collection.",
+        "verification_continue": "Verification complete, continue",
         "browser_start_error": "The collection browser could not be started.",
         "network_error": "Collection stopped because the browser could not load the result page.",
         "import_done": "Imported {n} new link(s).",
@@ -352,7 +391,8 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "edge_system_ready": "已检测到系统 Microsoft Edge。开始采集前，WebLens 会继续核对或准备匹配的 EdgeDriver。",
         "sort_by": "排序",
         "sort_none": "原始顺序",
-        "start": "开始采集",
+        "start": "开始新的采集",
+        "continue_collection": "继续上一采集",
         "stop": "停止",
         "export": "导出",
         "import": "导入链接",
@@ -367,7 +407,7 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "manual_collection_title": "手动采集搜索结果",
         "manual_intro": "根据当前 Google/百度检索参数生成搜索引擎链接。请将链接复制到日常浏览器中打开，手动翻页，并把每个搜索结果页保存为 HTML 文件；随后在这里批量导入这些 HTML，WebLens 会解析其中的真实结果链接并追加到当前“结果预览”。该模式不依赖 Selenium 或 WebDriver。",
         "manual_urls_group": "1. 生成检索链接",
-        "manual_urls_note": "每一项都是一个初始检索链接。百度会把多个检索词与多行站点/域名分别展开为“检索词 × 域名”任务；启用日期切片后再叠加日期任务。翻页完全由用户在浏览器中手动完成，只需使用搜索引擎自己的“下一页”。",
+        "manual_urls_note": "每一项都是一个初始检索链接。Google 的 OR 模式超过 8 个检索词时会按内部固定规则自动拆成每批最多 8 个；百度会把多个检索词与多行站点/域名分别展开为“检索词 × 域名”任务。启用日期切片后再叠加日期任务。翻页完全由用户在浏览器中手动完成，只需使用搜索引擎自己的“下一页”。",
         "manual_copy_selected": "复制所选链接",
         "manual_copy_all": "复制全部链接",
         "manual_copied": "已复制 {n} 个检索链接到剪贴板。",
@@ -383,6 +423,11 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "clear": "清空",
         "open_output": "打开输出文件",
         "open_download": "打开下载文件夹",
+        "reset_collection": "重置采集",
+        "confirm_reset_collection": "是否重置当前搜索引擎的采集任务？这将清空结果预览和采集断点，并把本面板的检索设置、采集设置、语种/国家地区限定、采集链接保存设置和正文下载设置恢复为默认值。浏览器/Selenium 配置以及磁盘上已经保存的文件不会被删除。",
+        "resume_unavailable": "当前没有可继续的采集断点。请开始新的采集，或导入包含爬取状态的 WebLens 结果文件。",
+        "resume_state_restored": "已从结果文件恢复可继续采集的断点状态：{path}",
+        "resume_state_mismatch": "当前检索参数与已保存的采集断点不一致。WebLens 已先恢复原采集参数，再继续采集。",
         "exit": "退出",
         "undo": "撤销结果编辑",
         "redo": "重做结果编辑",
@@ -464,6 +509,8 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "content_note": "Google/百度搜索结果采集已经全面改为浏览器模式。下面正文下载中的 Requests 选项只用于已经获得链接后的目标网页下载，不参与搜索引擎结果页采集。",
         "open_link": "打开链接",
         "delete_selected": "删除所选",
+        "delete_all_results": "删除全部",
+        "confirm_delete_all_results": "是否删除当前结果预览中的全部项目？检索设置、采集设置、采集断点以及磁盘上已经保存的文件都不会改变。删除后仍可立即使用“撤销”恢复。",
         "sort_time": "按时间排序",
         "sort_title": "按标题排序",
         "sort_source": "按来源排序",
@@ -492,7 +539,8 @@ UI_TEXTS: dict[str, dict[str, str]] = {
         "invalid_number": "请检查数值参数。",
         "invalid_output": "请选择输出文件。",
         "verification_title": "需要人工验证",
-        "verification_message": "采集浏览器出现了人工验证页面。WebLens 已暂停，不会在验证期间刷新页面、翻页、重启浏览器或打开其他页面。请直接在浏览器中完成人工验证，完成后可以关闭本提示。WebLens 只有在检测到真实搜索结果页已经完成渲染后才会自动恢复；仅仅回到搜索页面 URL 不会被判定为验证完成。",
+        "verification_message": "采集浏览器出现了人工验证页面。WebLens 现在完全暂停；在本提示窗口保持打开期间，不会检查、刷新、翻页、重启或重新导航浏览器。请直接在浏览器中完成人工验证，并确认搜索结果页面已经正常显示。然后回到 WebLens，点击“验证完成，继续采集”。只有在您明确点击该按钮后，WebLens 才会读取浏览器当前已经打开的页面并继续采集。",
+        "verification_continue": "验证完成，继续采集",
         "browser_start_error": "无法启动采集浏览器。",
         "network_error": "浏览器无法加载搜索结果页，采集已停止。",
         "import_done": "已导入 {n} 条新链接。",
@@ -528,14 +576,15 @@ UI_TEXTS: dict[str, dict[str, str]] = {
 # Traditional Chinese defaults to the Simplified wording for any string not
 # explicitly overridden, while option lists still retain their native labels.
 UI_TEXTS["zh_tra"] = dict(UI_TEXTS["zh_sim"], **{
-    "settings": "設定", "help": "幫助", "language": "介面語言", "search_engine": "搜尋引擎", "start": "開始採集",
+    "settings": "設定", "help": "幫助", "language": "介面語言", "search_engine": "搜尋引擎", "start": "開始新的採集",
+    "continue_collection": "繼續上一採集", "reset_collection": "重置採集",
     "stop": "停止", "export": "匯出", "import": "匯入連結", "paste_links": "貼上文字解析連結…", "paste_links_title": "貼上文字解析連結",
     "paste_links_help": "可直接貼上或輸入包含一個或多個 HTTP/HTTPS 連結的任意文字。WebLens 會自動解析連結，並把新連結追加到目前結果預覽末尾；可以反覆加入，不會覆蓋已有結果。",
     "paste_links_add": "解析並加入結果", "paste_links_clear": "清空文字", "paste_links_none": "貼上的文字中沒有偵測到 HTTP/HTTPS 連結。",
     "paste_links_result": "偵測到 {found} 條連結；新增 {added} 條；跳過重複 {skipped} 條。",
     "manual_collection": "手動採集…", "manual_collection_title": "手動採集搜尋結果",
     "manual_intro": "根據目前 Google/百度檢索參數產生搜尋引擎連結。請將連結複製到日常瀏覽器中開啟，手動翻頁，並把每個搜尋結果頁儲存為 HTML 檔；隨後在這裡批次匯入，WebLens 會解析真實結果連結並追加到目前結果預覽。此模式不依賴 Selenium 或 WebDriver。",
-    "manual_urls_group": "1. 產生檢索連結", "manual_urls_note": "每一項都是初始檢索連結。百度會把多個檢索詞與多行站點/域名分別展開為「檢索詞 × 域名」任務；日期切片會再增加一個任務維度。翻頁由使用者在瀏覽器中手動完成。",
+    "manual_urls_group": "1. 產生檢索連結", "manual_urls_note": "每一項都是初始檢索連結。Google 的 OR 模式超過 8 個檢索詞時會按內部固定規則自動拆成每批最多 8 個；百度會把多個檢索詞與多行站點/域名分別展開為「檢索詞 × 域名」任務。日期切片會再增加一個任務維度。翻頁由使用者在瀏覽器中手動完成。",
     "manual_copy_selected": "複製所選連結", "manual_copy_all": "複製全部連結", "manual_copied": "已複製 {n} 個檢索連結到剪貼簿。",
     "manual_html_group": "2. 匯入儲存的結果頁", "manual_html_note": "請使用瀏覽器「網頁另存為」儲存每一頁搜尋結果（僅 HTML 即可）。可一次選擇多個 .html/.htm 檔，也可多次匯入資料夾；新連結會追加到既有結果。",
     "manual_import_html": "匯入 HTML 檔…", "manual_import_folder": "匯入 HTML 資料夾…", "manual_parsing": "正在解析儲存的搜尋結果頁……",
@@ -557,6 +606,7 @@ UI_TEXTS["zh_tra"] = dict(UI_TEXTS["zh_sim"], **{
     "setup_all_partial": "一鍵配置未全部完成。可使用下方獨立控制項繼續手動配置。",
     "one_click_setup_short": "一鍵配置 Chrome 與 Edge", "advanced_browser_settings": "瀏覽器與 Selenium 設定…",
     "restore_original_order": "原始順序", "header_sort_hint": "點擊任一列表頭即可排序；再次點擊同一表頭可在正序和逆序之間切換。",
+    "delete_all_results": "刪除全部", "confirm_delete_all_results": "是否刪除目前結果預覽中的全部項目？檢索設定、採集設定、採集斷點以及磁碟上已儲存的檔案都不會改變。刪除後仍可立即使用「復原」恢復。",
     "manual_browser_invalid": "所選程式不是有效的 {browser} 瀏覽器，或無法讀取其版本。",
     "manual_driver_invalid": "所選 WebDriver 版本（{driver}）與瀏覽器版本（{browser}）不匹配。",
     "manual_driver_unknown": "無法從所選檔案讀取 WebDriver 版本。",
@@ -899,6 +949,7 @@ class CollectorPanel(QWidget):
         self.content_worker: threading.Thread | None = None
         self.stop_event = threading.Event()
         self.content_stop_event = threading.Event()
+        self.verification_continue_event = threading.Event()
         self.signals = PanelSignals()
         self.signals.crawl_event.connect(self._handle_crawl_event)
         self.signals.crawl_error.connect(self._handle_crawl_error)
@@ -912,6 +963,7 @@ class CollectorPanel(QWidget):
         self._crawl_terminal_message = ""
         self._content_terminal_error = ""
         self._last_result_autosave_signature: tuple[Any, ...] | None = None
+        self.crawl_state: dict[str, Any] | None = None
         self._settings = dict(panel_defaults(engine), **(settings or {}))
         self._build_ui()
         self.apply_settings(self._settings)
@@ -1108,10 +1160,12 @@ class CollectorPanel(QWidget):
         row1 = QHBoxLayout(); row1.setSpacing(6)
         self.open_link_btn = QPushButton()
         self.delete_btn = QPushButton()
+        self.delete_all_btn = QPushButton()
         self.restore_order_btn = QPushButton()
         self.count_label = QLabel(); self.count_label.setProperty("muted", True)
         row1.addWidget(self.open_link_btn)
         row1.addWidget(self.delete_btn)
+        row1.addWidget(self.delete_all_btn)
         row1.addWidget(self.restore_order_btn)
         row1.addStretch(1)
         row1.addWidget(self.count_label)
@@ -1162,12 +1216,16 @@ class CollectorPanel(QWidget):
         for i, width in enumerate(widths):
             self.table.setColumnWidth(i, width)
         header = self.table.horizontalHeader()
+        # Keep every Result Preview column explicitly visible and user-resizable.
+        # In particular, Title remains a normal interactive column even when
+        # record titles are temporarily empty.
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setMinimumSectionSize(54)
         header.setStretchLastSection(False)
         header.setSectionsClickable(True)
+        header.setSectionsMovable(False)
         header.setSortIndicatorShown(False)
         header.sectionClicked.connect(self._header_section_clicked)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setDefaultSectionSize(28)
         result_layout.addWidget(self.table, 1)
 
@@ -1192,6 +1250,7 @@ class CollectorPanel(QWidget):
 
         self.open_link_btn.clicked.connect(self.open_selected_link)
         self.delete_btn.clicked.connect(self.delete_selected)
+        self.delete_all_btn.clicked.connect(self.delete_all_results)
         self.restore_order_btn.clicked.connect(self.restore_original_order)
         self.sample_btn.clicked.connect(self.sample_records)
         self.download_selected_btn.clicked.connect(self.download_selected_content)
@@ -1205,6 +1264,7 @@ class CollectorPanel(QWidget):
             ("download_selected", self.download_selected_content),
             ("download_all", self.download_all_content),
             ("delete_selected", self.delete_selected),
+            ("delete_all_results", self.delete_all_results),
         ):
             action = QAction(self.table)
             action.setProperty("text_key", action_text_key)
@@ -1230,7 +1290,7 @@ class CollectorPanel(QWidget):
         self.output_browse.setText(tr(lang,"browse"))
         self.languages_label.setText(tr(lang,"languages")); self.countries_label.setText(tr(lang,"countries")); self.clear_lang_btn.setText(tr(lang,"clear_selection")); self.clear_country_btn.setText(tr(lang,"clear_selection"))
         self.output_file_label.setText(tr(lang,"output_file")); self.output_format_label.setText(tr(lang,"output_format"))
-        self.open_link_btn.setText(tr(lang,"open_link")); self.delete_btn.setText(tr(lang,"delete_selected")); self.restore_order_btn.setText(tr(lang,"restore_original_order")); self.table.setToolTip(tr(lang,"header_sort_hint"))
+        self.open_link_btn.setText(tr(lang,"open_link")); self.delete_btn.setText(tr(lang,"delete_selected")); self.delete_all_btn.setText(tr(lang,"delete_all_results")); self.restore_order_btn.setText(tr(lang,"restore_original_order")); self.table.setToolTip(tr(lang,"header_sort_hint"))
         self.sample_scheme_label.setText(tr(lang,"sample_scheme")); self.sample_count_label.setText(tr(lang,"sample_count")); self.sample_btn.setText(tr(lang,"sample"))
         self.download_selected_btn.setText(tr(lang,"download_selected")); self.download_all_btn.setText(tr(lang,"download_all")); self.download_settings_btn.setText(tr(lang,"download_settings")); self.stop_download_btn.setText(tr(lang,"stop_download"))
         for action in self.context_actions:
@@ -1254,9 +1314,26 @@ class CollectorPanel(QWidget):
             self.status_label.setText(tr(lang,"ready"))
         self.update_count()
 
-    def _populate_multiselect_lists(self) -> None:
-        wanted_langs = set(self.selected_list_values(self.languages_list)) or set(self._settings.get("languages_lr", []))
-        wanted_countries = set(self.selected_list_values(self.countries_list)) or set(self._settings.get("countries_cr", []))
+    def _populate_multiselect_lists(
+        self,
+        wanted_langs: set[str] | None = None,
+        wanted_countries: set[str] | None = None,
+    ) -> None:
+        """Rebuild Google language/country lists while preserving the intended selection.
+
+        ``None`` means preserve the *current* selection exactly, including an
+        intentionally empty selection.  ``apply_settings`` passes explicit sets
+        from the settings being applied, so Reset collection and imported crawl
+        state cannot be overridden by stale selections left in the widgets.
+        """
+        if wanted_langs is None:
+            wanted_langs = set(self.selected_list_values(self.languages_list))
+        else:
+            wanted_langs = set(wanted_langs)
+        if wanted_countries is None:
+            wanted_countries = set(self.selected_list_values(self.countries_list))
+        else:
+            wanted_countries = set(wanted_countries)
         self.languages_list.clear()
         for opt in LANGUAGE_OPTIONS:
             if not opt.get("lr"):
@@ -1353,7 +1430,10 @@ class CollectorPanel(QWidget):
         self._normalize_date_controls(reset_when_unfiltered=True)
         self.output_edit.setText(str(s.get("output_path",default_output_path(self.engine)))); self.output_format_combo.setCurrentText(str(s.get("output_format","xlsx")))
         self.sample_count_spin.setValue(int(s.get("sample_count",20)))
-        self._populate_multiselect_lists()
+        self._populate_multiselect_lists(
+            set(s.get("languages_lr", []) or []),
+            set(s.get("countries_cr", []) or []),
+        )
         self.retranslate_ui()
 
     def collect_settings(self) -> dict[str, Any]:
@@ -1395,54 +1475,266 @@ class CollectorPanel(QWidget):
             page_delay_min_ms=int(s["page_delay_min_ms"]), page_delay_max_ms=int(s["page_delay_max_ms"]), timeout_seconds=int(s["timeout"]), user_agent=str(s.get("user_agent") or DEFAULT_USER_AGENT), browser_wait_ms=int(browser.get("browser_wait_ms",5000)), browser_headless=bool(browser.get("browser_headless",False)), browser_driver_path=str(browser.get("browser_driver_path", "")), browser_binary_path=str(browser.get("browser_binary_path", "")), baidu_sort=str(s.get("baidu_sort","focus")), debug_dir=str(app_base_dir() / "weblens_debug_html"),
         )
 
+    def _panel_state_snapshot(self) -> dict[str, Any]:
+        """Return the JSON-safe panel settings required to reconstruct a crawl."""
+        settings = self.collect_settings()
+        return json.loads(json.dumps(settings, ensure_ascii=False, default=str))
+
+    def _create_crawl_state(self, cfg: CollectorConfig) -> dict[str, Any]:
+        now = crawl_state_now_iso()
+        return {
+            "state_version": CRAWL_STATE_VERSION,
+            "engine": self.engine,
+            "status": "running",
+            "created_at": now,
+            "updated_at": now,
+            "plan_signature": crawl_plan_signature(cfg),
+            "panel_settings": self._panel_state_snapshot(),
+            "progress": {},
+            "reason": "",
+        }
+
+    def _set_crawl_state_status(self, status: str, reason: str = "") -> None:
+        if not isinstance(self.crawl_state, dict):
+            return
+        self.crawl_state["status"] = str(status or "")
+        self.crawl_state["reason"] = str(reason or "")
+        self.crawl_state["updated_at"] = crawl_state_now_iso()
+
+    def _update_crawl_checkpoint(self, data: dict[str, Any]) -> None:
+        if not isinstance(self.crawl_state, dict):
+            return
+        payload = dict(data or {})
+        if payload.get("plan_signature"):
+            self.crawl_state["plan_signature"] = str(payload.get("plan_signature"))
+        self.crawl_state["progress"] = payload
+        # A stop request must not be accidentally turned back into "running"
+        # by a queued checkpoint event that reaches the GUI a moment later.
+        if not self.stop_event.is_set() and self.crawl_state.get("status") not in {"completed", "failed"}:
+            self.crawl_state["status"] = "running"
+        self.crawl_state["updated_at"] = crawl_state_now_iso()
+
+    def can_resume_collection(self) -> bool:
+        state = self.crawl_state
+        if not self.records or not isinstance(state, dict):
+            return False
+        if str(state.get("engine") or "").lower() != self.engine:
+            return False
+        if str(state.get("status") or "").lower() == "completed":
+            return False
+        return isinstance(state.get("progress"), dict) and bool(state.get("progress"))
+
+    def _restore_settings_from_crawl_state(self, state: dict[str, Any], *, result_path: str = "") -> bool:
+        """Restore saved panel settings without touching global browser settings."""
+        saved = state.get("panel_settings") if isinstance(state, dict) else None
+        if not isinstance(saved, dict):
+            return False
+        restored = dict(panel_defaults(self.engine), **saved)
+        if result_path:
+            suffix = Path(result_path).suffix.lower().lstrip(".")
+            if suffix in OUTPUT_FORMATS:
+                restored["output_format"] = suffix
+                restored["output_path"] = str(result_path)
+        self.apply_settings(restored)
+        self._settings = dict(restored)
+        if isinstance(self.crawl_state, dict):
+            self.crawl_state["panel_settings"] = self._panel_state_snapshot()
+            self.crawl_state["updated_at"] = crawl_state_now_iso()
+        return True
+
+    def _wait_for_verification_confirmation(self) -> bool:
+        """Block the crawl worker without touching the browser until the user confirms."""
+        while True:
+            if self.stop_event.is_set():
+                return False
+            if self.verification_continue_event.wait(0.2):
+                self.verification_continue_event.clear()
+                return not self.stop_event.is_set()
+
+    def _launch_crawl_worker(self, cfg: CollectorConfig, *, resume: bool) -> None:
+        resume_payload = copy_state(self.crawl_state) if resume else None
+        existing_links = [str(getattr(r, "link", "") or "") for r in self.records] if resume else []
+
+        def worker():
+            try:
+                for event in crawl(
+                    cfg,
+                    stop_checker=self.stop_event.is_set,
+                    resume_state=resume_payload,
+                    existing_links=existing_links,
+                    verification_waiter=self._wait_for_verification_confirmation,
+                ):
+                    self.signals.crawl_event.emit(event)
+            except StopCrawl:
+                self.signals.crawl_error.emit("stopped", tr(self.lang, "stopped"))
+            except BrowserStartupError as exc:
+                self.signals.crawl_error.emit("browser", str(exc))
+            except NetworkAccessError as exc:
+                self.signals.crawl_error.emit("network", str(exc))
+            except Exception as exc:
+                self.signals.crawl_error.emit("error", str(exc))
+            finally:
+                self.signals.crawl_finished.emit()
+
+        self.worker = threading.Thread(target=worker, daemon=True)
+        self.worker.start()
+        self.window.sync_action_states()
+
     def start_crawl(self) -> None:
-        if self.worker and self.worker.is_alive(): return
+        """Start a completely new collection using the current panel settings."""
+        if self.worker and self.worker.is_alive():
+            return
         if not self.window.preflight_browser_environment():
             QMessageBox.warning(self, APP_NAME, tr(self.lang, "browser_required"))
             self.window.open_browser_settings()
             return
-        try: cfg=self.build_config()
+        try:
+            cfg = self.build_config()
         except Exception as exc:
-            QMessageBox.critical(self,APP_NAME,str(exc)); return
+            QMessageBox.critical(self, APP_NAME, str(exc))
+            return
+
         self.window.save_settings()
-        self.records=[]; self.original_records=[]; self.undo_stack=[]; self.redo_stack=[]; self._clear_header_sort_indicator(); self.table_model.refresh(); self.log_text.clear(); self.stop_event.clear(); self._verification_dialog_shown=False
-        self._crawl_terminal_kind=""; self._crawl_terminal_message=""; self._last_result_autosave_signature=None
-        self.progress.setRange(0,0); self.status_label.setText(tr(self.lang,"running")); self.update_count()
-        def worker():
+        self.records = []
+        self.original_records = []
+        self.undo_stack = []
+        self.redo_stack = []
+        self._clear_header_sort_indicator()
+        self.table_model.refresh()
+        self.log_text.clear()
+        self.stop_event.clear()
+        self.verification_continue_event.clear()
+        self._verification_dialog_shown = False
+        self._crawl_terminal_kind = ""
+        self._crawl_terminal_message = ""
+        self._last_result_autosave_signature = None
+        self.crawl_state = self._create_crawl_state(cfg)
+        self.progress.setRange(0, 0)
+        self.status_label.setText(tr(self.lang, "running"))
+        self.update_count()
+        self._launch_crawl_worker(cfg, resume=False)
+
+    def continue_crawl(self) -> None:
+        """Continue an interrupted collection from its saved safety checkpoint."""
+        if self.worker and self.worker.is_alive():
+            return
+        if not self.can_resume_collection():
+            QMessageBox.information(self, APP_NAME, tr(self.lang, "resume_unavailable"))
+            return
+        if not self.window.preflight_browser_environment():
+            QMessageBox.warning(self, APP_NAME, tr(self.lang, "browser_required"))
+            self.window.open_browser_settings()
+            return
+
+        state = copy_state(self.crawl_state) or {}
+        saved_signature = str(state.get("plan_signature") or "")
+        restored = False
+        try:
+            cfg = self.build_config()
+            if saved_signature and crawl_plan_signature(cfg) != saved_signature:
+                restored = self._restore_settings_from_crawl_state(state)
+                cfg = self.build_config()
+        except Exception:
+            restored = self._restore_settings_from_crawl_state(state)
             try:
-                for event in crawl(cfg, stop_checker=self.stop_event.is_set): self.signals.crawl_event.emit(event)
-            except StopCrawl:
-                self.signals.crawl_error.emit("stopped",tr(self.lang,"stopped"))
-            except BrowserStartupError as exc:
-                self.signals.crawl_error.emit("browser",str(exc))
-            except NetworkAccessError as exc:
-                self.signals.crawl_error.emit("network",str(exc))
+                cfg = self.build_config()
             except Exception as exc:
-                self.signals.crawl_error.emit("error",str(exc))
-            finally:self.signals.crawl_finished.emit()
-        self.worker=threading.Thread(target=worker,daemon=True); self.worker.start(); self.window.sync_action_states()
+                QMessageBox.critical(self, APP_NAME, str(exc))
+                return
+
+        if saved_signature and crawl_plan_signature(cfg) != saved_signature:
+            QMessageBox.warning(self, APP_NAME, tr(self.lang, "resume_unavailable"))
+            return
+        if restored:
+            self.log(tr(self.lang, "resume_state_mismatch"))
+
+        # Keep any timing/output/download-setting changes that do not alter the
+        # actual search plan, then persist them with the renewed checkpoint.
+        self.crawl_state = state
+        self.crawl_state["panel_settings"] = self._panel_state_snapshot()
+        self._set_crawl_state_status("running", "")
+        self.stop_event.clear()
+        self.verification_continue_event.clear()
+        self._verification_dialog_shown = False
+        self._crawl_terminal_kind = ""
+        self._crawl_terminal_message = ""
+        self._last_result_autosave_signature = None
+        self.progress.setRange(0, 0)
+        self.status_label.setText(tr(self.lang, "running"))
+        self.log("=== " + tr(self.lang, "continue_collection") + " ===")
+        self.window.save_settings()
+        self._launch_crawl_worker(cfg, resume=True)
+
+    def _append_crawl_record(self, incoming: Any) -> bool:
+        """Append one crawl record using final normalized-URL deduplication only.
+
+        Google ``/goto`` links are normalized in the collector before records are
+        emitted whenever Google returns a usable redirect target.  Result Preview
+        therefore performs only deterministic URL deduplication here and does not
+        infer story identity from titles, sources, or publication times.
+        """
+        incoming_link = str(getattr(incoming, "link", "") or "")
+        incoming_key = normalize_url_for_dedup(incoming_link)
+        if incoming_key:
+            for existing in self.records:
+                existing_link = str(getattr(existing, "link", "") or "")
+                if normalize_url_for_dedup(existing_link) == incoming_key:
+                    return False
+        self.records.append(incoming)
+        self.original_records.append(incoming)
+        return True
 
     def _handle_crawl_event(self,event: Any) -> None:
         et=getattr(event,"event_type","")
         if et=="slice" and getattr(event,"data",None):
             total=max(1,int(event.data.get("slice_total",1))); idx=max(1,int(event.data.get("slice_index",1))); self.progress.setRange(0,total); self.progress.setValue(idx-1); self.status_label.setText(event.message); self.log(event.message)
+        elif et=="checkpoint" and getattr(event,"data",None):
+            self._update_crawl_checkpoint(dict(event.data))
+            if str(event.data.get("phase") or "") == "page_complete" and self.records:
+                self._autosave_results("collection checkpoint")
+            self.window.sync_action_states()
         elif et=="record" and getattr(event,"record",None):
             if self._header_sort_column is not None:
                 self._clear_header_sort_indicator()
-            self.records.append(event.record); self.original_records.append(event.record); self.table_model.refresh(); self.update_count()
+            if self._append_crawl_record(event.record):
+                self.table_model.refresh(); self.update_count()
         elif et=="verification_wait":
-            self.log("[VERIFICATION WAIT] "+event.message); self.status_label.setText(tr(self.lang,"verification_title"))
+            self.log("[VERIFICATION WAIT] " + event.message)
+            self.status_label.setText(tr(self.lang, "verification_title"))
             if not self._verification_dialog_shown:
-                self._verification_dialog_shown=True; QMessageBox.warning(self,tr(self.lang,"verification_title"),tr(self.lang,"verification_message"))
+                self._verification_dialog_shown = True
+                dialog = QMessageBox(self)
+                dialog.setIcon(QMessageBox.Icon.Warning)
+                dialog.setWindowTitle(tr(self.lang, "verification_title"))
+                dialog.setText(tr(self.lang, "verification_message"))
+                dialog.setStandardButtons(QMessageBox.StandardButton.Ok)
+                ok_button = dialog.button(QMessageBox.StandardButton.Ok)
+                if ok_button is not None:
+                    ok_button.setText(tr(self.lang, "verification_continue"))
+                dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+                dialog.exec()
+                self._verification_dialog_shown = False
+                if not self.stop_event.is_set():
+                    self.verification_continue_event.set()
         elif et=="verification_passed":
             self._verification_dialog_shown=False; self.log("[VERIFICATION PASSED] "+event.message); self.status_label.setText(tr(self.lang,"running"))
         elif et=="done":
+            if isinstance(getattr(event, "data", None), dict) and event.data.get("status") == "completed":
+                if isinstance(self.crawl_state, dict):
+                    if event.data.get("plan_signature"):
+                        self.crawl_state["plan_signature"] = str(event.data.get("plan_signature"))
+                    self._set_crawl_state_status("completed", "")
             self.log(event.message)
+            self.window.sync_action_states()
         else:self.log(str(getattr(event,"message",event)))
 
     def _handle_crawl_error(self,kind: str,message: str) -> None:
         self._crawl_terminal_kind = str(kind or "error")
         self._crawl_terminal_message = str(message or "")
+        if kind == "stopped":
+            self._set_crawl_state_status("stopped", message)
+        else:
+            self._set_crawl_state_status("failed", message)
         # Save everything already delivered to Result Preview before opening any
         # modal error dialog.  The finalizer saves once more after the worker has
         # fully stopped, so late queued record events are not lost.
@@ -1473,10 +1765,13 @@ class CollectorPanel(QWidget):
             self.status_label.setText(tr(self.lang,"done"))
         else:
             self.status_label.setText(tr(self.lang,"no_records"))
+        self.window.sync_action_states()
 
     def stop_crawl(self) -> None:
         if self.worker and self.worker.is_alive():
             self.stop_event.set()
+            self.verification_continue_event.set()
+            self._set_crawl_state_status("stopped", "manual stop requested")
             # Emergency save immediately on the user's click.  The worker may still
             # be inside a browser/network wait, so do not wait for thread shutdown
             # before protecting the records already collected.
@@ -1487,6 +1782,8 @@ class CollectorPanel(QWidget):
     def stop_all(self) -> None:
         self.stop_event.set()
         self.content_stop_event.set()
+        self.verification_continue_event.set()
+        self._set_crawl_state_status("stopped", "stop-all requested")
         self._autosave_results("stop-all requested")
         self.status_label.setText(tr(self.lang,"stopped"))
         self.log(tr(self.lang,"stopped"))
@@ -1521,7 +1818,44 @@ class CollectorPanel(QWidget):
         self.push_undo(); self.records=list(self.original_records); self._clear_header_sort_indicator(); self.table_model.refresh(); self.update_count()
 
     def clear_results(self) -> None:
-        self.records=[]; self.original_records=[]; self.undo_stack=[]; self.redo_stack=[]; self._last_result_autosave_signature=None; self._clear_header_sort_indicator(); self.table_model.refresh(); self.log_text.clear(); self.progress.setRange(0,100); self.progress.setValue(0); self.status_label.setText(tr(self.lang,"ready")); self.update_count()
+        self.records=[]; self.original_records=[]; self.undo_stack=[]; self.redo_stack=[]; self.crawl_state=None; self._last_result_autosave_signature=None; self._clear_header_sort_indicator(); self.table_model.refresh(); self.log_text.clear(); self.progress.setRange(0,100); self.progress.setValue(0); self.status_label.setText(tr(self.lang,"ready")); self.update_count(); self.window.sync_action_states()
+
+    def reset_collection(self) -> None:
+        """Return the active engine panel to a clean, new-task state."""
+        if (self.worker and self.worker.is_alive()) or (self.content_worker and self.content_worker.is_alive()):
+            return
+        if QMessageBox.question(self, APP_NAME, tr(self.lang, "confirm_reset_collection")) != QMessageBox.StandardButton.Yes:
+            return
+        defaults = panel_defaults(self.engine)
+        self._settings = dict(defaults)
+        # Clear the live selections before applying defaults.  apply_settings()
+        # now also uses the explicit settings values, but this keeps Reset
+        # collection unambiguous even if the list widgets change later.
+        self.languages_list.clearSelection()
+        self.countries_list.clearSelection()
+        self.apply_settings(defaults)
+        self.stop_event.clear()
+        self.content_stop_event.clear()
+        self.verification_continue_event.clear()
+        self.records = []
+        self.original_records = []
+        self.undo_stack = []
+        self.redo_stack = []
+        self.crawl_state = None
+        self._crawl_terminal_kind = ""
+        self._crawl_terminal_message = ""
+        self._content_terminal_error = ""
+        self._last_result_autosave_signature = None
+        self._verification_dialog_shown = False
+        self._clear_header_sort_indicator()
+        self.table_model.refresh()
+        self.log_text.clear()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.status_label.setText(tr(self.lang, "ready"))
+        self.update_count()
+        self.window.save_settings()
+        self.window.sync_action_states()
 
     def open_selected_link(self) -> None:
         recs=self.selected_records()
@@ -1533,6 +1867,19 @@ class CollectorPanel(QWidget):
         rows=self.selected_rows()
         if not rows:return
         self.push_undo(); doomed=set(rows); self.records=[r for i,r in enumerate(self.records) if i not in doomed]; self.table_model.refresh(); self.update_count()
+
+    def delete_all_results(self) -> None:
+        """Delete every item in Result Preview without resetting the collection task."""
+        if not self.records:
+            return
+        if QMessageBox.question(self, APP_NAME, tr(self.lang, "confirm_delete_all_results")) != QMessageBox.StandardButton.Yes:
+            return
+        self.push_undo()
+        self.records = []
+        self._clear_header_sort_indicator()
+        self.table_model.refresh()
+        self.update_count()
+        self.window.sync_action_states()
 
     @staticmethod
     def _record_sort_value(record: Any, key: str) -> Any:
@@ -1679,14 +2026,62 @@ class CollectorPanel(QWidget):
             self.update_count()
         return len(added), max(0, len(imported) - len(added))
 
+    def _restore_imported_collection(self, imported: list[Any], state: dict[str, Any], path: str) -> None:
+        restored_state = copy_state(state)
+        if not restored_state:
+            return
+        self.records = list(imported)
+        self.original_records = list(imported)
+        self.undo_stack = []
+        self.redo_stack = []
+        self._clear_header_sort_indicator()
+        self.crawl_state = restored_state
+        self._last_result_autosave_signature = None
+        self._restore_settings_from_crawl_state(restored_state, result_path=path)
+        self.table_model.refresh()
+        self.update_count()
+        self.log_text.clear()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        state_status = str(restored_state.get("status") or "").lower()
+        if state_status == "completed":
+            self.status_label.setText(tr(self.lang, "done"))
+        else:
+            self.status_label.setText(tr(self.lang, "stopped"))
+        message = tr(self.lang, "resume_state_restored", path=path)
+        self.log(message)
+        self.window.save_settings()
+        self.window.sync_action_states()
+
     def import_links(self) -> None:
         path,_=QFileDialog.getOpenFileName(self,tr(self.lang,"import"),str(app_base_dir()),"WebLens/result files (*.xlsx *.csv *.tsv *.txt *.text *.xml *.docx);;Excel (*.xlsx);;Text/CSV (*.txt *.text *.csv *.tsv);;All files (*)")
         if not path:return
-        try: imported=import_records(path)
-        except Exception as exc: QMessageBox.critical(self,APP_NAME,str(exc));return
-        if not imported: QMessageBox.information(self,APP_NAME,tr(self.lang,"no_records"));return
+        try:
+            imported, state = import_records_with_state(path)
+        except Exception as exc:
+            QMessageBox.critical(self,APP_NAME,str(exc));return
+        if not imported:
+            QMessageBox.information(self,APP_NAME,tr(self.lang,"no_records"));return
+
+        if isinstance(state, dict):
+            state_engine = str(state.get("engine") or "").lower()
+            target = self
+            if state_engine in {"google", "baidu"} and state_engine != self.engine:
+                target = self.window.google_panel if state_engine == "google" else self.window.baidu_panel
+                index = 0 if state_engine == "google" else 1
+                self.window._switch_engine(index)
+                if index == 0:
+                    self.window.google_engine_btn.setChecked(True)
+                else:
+                    self.window.baidu_engine_btn.setChecked(True)
+            target._restore_imported_collection(imported, state, path)
+            return
+
+        # Ordinary/legacy files intentionally do not create or replace crawl
+        # state. They behave exactly like the existing append-link workflow.
         added, _skipped = self._append_imported_records(imported)
         self.status_label.setText(tr(self.lang,"import_done",n=added)); self.log(tr(self.lang,"import_done",n=added))
+        self.window.sync_action_states()
 
     def paste_links_from_text(self) -> None:
         """Parse one or more URLs from arbitrary pasted text and append them."""
@@ -1758,6 +2153,7 @@ class CollectorPanel(QWidget):
                 str(getattr(rec,"clean_text_path","") or ""),
                 str(getattr(rec,"metadata_path","") or ""),
             ))
+        rows.append(("__crawl_state__", state_to_json(self.crawl_state)))
         return tuple(rows)
 
     def _write_result_file(self) -> tuple[int,str]:
@@ -1771,7 +2167,7 @@ class CollectorPanel(QWidget):
             k=normalize_url_for_dedup(rec.link)
             if k in seen:continue
             seen.add(k);unique.append(rec)
-        export_records(unique,path,fmt)
+        export_records(unique,path,fmt,crawl_state=self.crawl_state)
         return len(unique),path
 
     def _autosave_results(self, reason: str) -> bool:
@@ -1947,13 +2343,32 @@ class CollectorPanel(QWidget):
             current_link=str(getattr(rec,"link","") or "")
             if final_url.startswith(("http://","https://")) and is_google_news_redirect_url(current_link) and not is_google_news_redirect_url(final_url):
                 rec.link=final_url
-                try: rec.actual_domain=(urlparse(final_url).netloc or "").lower().lstrip("www.")
-                except Exception: rec.actual_domain=""
+            source_url = final_url if final_url.startswith(("http://","https://")) else str(getattr(rec,"link","") or "")
+            try: rec.actual_domain=(urlparse(source_url).hostname or "").lower().lstrip("www.")
+            except Exception: rec.actual_domain=""
+            # Source semantics are deliberately two-stage: collection/import use
+            # the main domain; successful destination-page metadata may replace
+            # it with a detected publication/site/organization name.
+            detected_source = _detected_source_label(result)
+            rec.source = detected_source or primary_domain(source_url)
             if (not getattr(rec,"title","") or getattr(rec,"title","")==current_link) and get("title"):rec.title=str(get("title"))
-            if not getattr(rec,"published_time","") and get("published_time"):rec.published_time=str(get("published_time"))
+            # Search collection and destination-page downloading are separate
+            # metadata stages.  A search-result date is useful provisional
+            # metadata; when the downloaded destination page exposes its own
+            # publication time, that page-level value is more authoritative and
+            # deliberately replaces the search-result value.
+            downloaded_published=str(get("published_time","") or "").strip()
+            if downloaded_published:rec.published_time=downloaded_published
             for attr,key in (("content_word_count","word_count"),("content_quality_score","quality_score"),("content_extraction_method","extraction_method"),("content_cleaning_scheme","cleaning_scheme"),("metadata_excel_path","metadata_excel_path"),("raw_html_path","raw_html_path"),("raw_text_path","raw_text_path"),("clean_text_path","clean_text_path"),("metadata_path","metadata_path")):setattr(rec,attr,get(key,0 if "count" in key or "score" in key else ""))
             self.log(("Skipped" if skipped else "Downloaded")+": "+str(getattr(rec,"title",""))[:100])
-        else:setattr(rec,"content_status","Failed");setattr(rec,"content_error",str(get("error","")));self.log("Content failed: "+str(get("error",""))[:180])
+        else:
+            setattr(rec,"content_status","Failed");setattr(rec,"content_error",str(get("error","")))
+            fallback_url=str(getattr(rec,"link","") or "")
+            if not str(getattr(rec,"source","") or "").strip(): rec.source=primary_domain(fallback_url)
+            if not str(getattr(rec,"actual_domain","") or "").strip():
+                try: rec.actual_domain=(urlparse(fallback_url).hostname or "").lower().lstrip("www.")
+                except Exception: rec.actual_domain=""
+            self.log("Content failed: "+str(get("error",""))[:180])
         self.table_model.refresh()
 
     def _handle_content_progress(self,done: int,total: int) -> None:self.progress.setRange(0,max(1,total));self.progress.setValue(done);self.status_label.setText(f"{done}/{total}")
@@ -3402,6 +3817,7 @@ class BFSUWebLensWindow(QMainWindow):
 
     def _create_actions(self) -> None:
         self.act_start = QAction(self); self.act_start.setShortcut(QKeySequence("Meta+Return" if sys.platform == "darwin" else "Ctrl+Return")); self.act_start.triggered.connect(lambda: self.active_panel().start_crawl())
+        self.act_continue = QAction(self); self.act_continue.setShortcut(QKeySequence("Meta+Shift+Return" if sys.platform == "darwin" else "Ctrl+Shift+Return")); self.act_continue.triggered.connect(lambda: self.active_panel().continue_crawl())
         self.act_stop = QAction(self); self.act_stop.setShortcut(QKeySequence("Esc")); self.act_stop.triggered.connect(self.stop_collection)
         self.act_manual_collection = QAction(self); self.act_manual_collection.triggered.connect(self.open_manual_collection)
         self.act_export = QAction(self); self.act_export.setShortcut(QKeySequence.StandardKey.Save); self.act_export.triggered.connect(lambda: self.active_panel().export_results())
@@ -3410,6 +3826,7 @@ class BFSUWebLensWindow(QMainWindow):
         self.act_import_template = QAction(self); self.act_import_template.triggered.connect(self.download_import_template)
         self.act_open_output = QAction(self); self.act_open_output.triggered.connect(lambda: self.active_panel().open_output())
         self.act_open_download = QAction(self); self.act_open_download.triggered.connect(lambda: self.active_panel().open_download_folder())
+        self.act_reset_collection = QAction(self); self.act_reset_collection.triggered.connect(lambda: self.active_panel().reset_collection())
         self.act_exit = QAction(self); self.act_exit.triggered.connect(self.close)
         self.act_undo = QAction(self); self.act_undo.setShortcut(QKeySequence.StandardKey.Undo); self.act_undo.triggered.connect(lambda: self.active_panel().undo_result_edit())
         self.act_redo = QAction(self); self.act_redo.setShortcut(QKeySequence.StandardKey.Redo); self.act_redo.triggered.connect(lambda: self.active_panel().redo_result_edit())
@@ -3432,8 +3849,8 @@ class BFSUWebLensWindow(QMainWindow):
     def _create_menus(self) -> None:
         mb = self.menuBar()
         self.file_menu = mb.addMenu("")
-        self.file_menu.addAction(self.act_start); self.file_menu.addAction(self.act_stop); self.file_menu.addAction(self.act_manual_collection); self.file_menu.addSeparator()
-        self.file_menu.addAction(self.act_export); self.file_menu.addAction(self.act_import); self.file_menu.addAction(self.act_paste_links); self.file_menu.addAction(self.act_import_template); self.file_menu.addAction(self.act_open_output); self.file_menu.addAction(self.act_open_download); self.file_menu.addSeparator(); self.file_menu.addAction(self.act_exit)
+        self.file_menu.addAction(self.act_start); self.file_menu.addAction(self.act_continue); self.file_menu.addAction(self.act_stop); self.file_menu.addAction(self.act_manual_collection); self.file_menu.addSeparator()
+        self.file_menu.addAction(self.act_export); self.file_menu.addAction(self.act_import); self.file_menu.addAction(self.act_paste_links); self.file_menu.addAction(self.act_import_template); self.file_menu.addAction(self.act_open_output); self.file_menu.addAction(self.act_open_download); self.file_menu.addAction(self.act_reset_collection); self.file_menu.addSeparator(); self.file_menu.addAction(self.act_exit)
         self.edit_menu = mb.addMenu("")
         self.edit_menu.addAction(self.act_undo); self.edit_menu.addAction(self.act_redo); self.edit_menu.addAction(self.act_reset_results); self.edit_menu.addAction(self.act_clear)
         self.settings_menu = mb.addMenu("")
@@ -3454,6 +3871,7 @@ class BFSUWebLensWindow(QMainWindow):
         self.main_toolbar.setFloatable(False)
         self.main_toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.act_start.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_MediaPlay))
+        self.act_continue.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_MediaSeekForward))
         self.act_stop.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_MediaStop))
         self.act_manual_collection.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_ComputerIcon))
         self.act_import.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_DialogOpenButton))
@@ -3461,8 +3879,9 @@ class BFSUWebLensWindow(QMainWindow):
         self.act_export.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_DialogSaveButton))
         self.act_open_output.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_FileIcon))
         self.act_open_download.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_DirOpenIcon))
+        self.act_reset_collection.setIcon(tinted_standard_icon(self, QStyle.StandardPixmap.SP_BrowserReload))
         self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.main_toolbar)
-        for action in (self.act_start, self.act_stop, self.act_manual_collection):
+        for action in (self.act_start, self.act_continue, self.act_stop, self.act_manual_collection):
             self.main_toolbar.addAction(action)
         start_widget = self.main_toolbar.widgetForAction(self.act_start)
         stop_widget = self.main_toolbar.widgetForAction(self.act_stop)
@@ -3476,7 +3895,7 @@ class BFSUWebLensWindow(QMainWindow):
         for action in (self.act_import, self.act_paste_links, self.act_export):
             self.main_toolbar.addAction(action)
         self.main_toolbar.addSeparator()
-        for action in (self.act_open_output, self.act_open_download):
+        for action in (self.act_open_output, self.act_open_download, self.act_reset_collection):
             self.main_toolbar.addAction(action)
 
     def open_manual_collection(self) -> None:
@@ -3506,8 +3925,10 @@ class BFSUWebLensWindow(QMainWindow):
         busy = collecting or downloading
         ready = self.browser_environment_ready()
         self.act_start.setEnabled((not busy) and ready)
+        self.act_continue.setEnabled((not busy) and ready and self.active_panel().can_resume_collection())
         self.act_stop.setEnabled(collecting)
         self.act_manual_collection.setEnabled(not busy)
+        self.act_reset_collection.setEnabled(not busy)
         self.act_clear_web_components.setEnabled(not busy)
         self.google_engine_btn.setEnabled(not busy)
         self.baidu_engine_btn.setEnabled(not busy)
@@ -3519,7 +3940,7 @@ class BFSUWebLensWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.google_engine_btn.setText(tr(l, "google")); self.baidu_engine_btn.setText(tr(l, "baidu")); self.engine_selector_label.setText(tr(l, "search_engine")); self.environment_label.setText(tr(l, "browser_required")); self.environment_one_click_btn.setText(tr(l, "one_click_setup_short")); self.environment_config_btn.setText(tr(l, "advanced_browser_settings"))
         self.file_menu.setTitle(tr(l, "file")); self.edit_menu.setTitle(tr(l, "edit")); self.settings_menu.setTitle(tr(l, "settings")); self.language_menu.setTitle(tr(l, "language")); self.help_menu.setTitle(tr(l, "help"))
-        for act, key in ((self.act_start,"start"),(self.act_stop,"stop"),(self.act_manual_collection,"manual_collection"),(self.act_export,"export"),(self.act_import,"import"),(self.act_paste_links,"paste_links"),(self.act_import_template,"download_template"),(self.act_open_output,"open_output"),(self.act_open_download,"open_download"),(self.act_exit,"exit"),(self.act_undo,"undo"),(self.act_redo,"redo"),(self.act_reset_results,"reset_results"),(self.act_clear,"clear"),(self.act_browser_settings,"browser_settings"),(self.act_clear_web_components,"clear_web_components"),(self.act_reset_settings,"reset_settings"),(self.act_guide,"user_guide"),(self.act_params,"parameter_guide"),(self.act_about,"about")):
+        for act, key in ((self.act_start,"start"),(self.act_continue,"continue_collection"),(self.act_stop,"stop"),(self.act_manual_collection,"manual_collection"),(self.act_export,"export"),(self.act_import,"import"),(self.act_paste_links,"paste_links"),(self.act_import_template,"download_template"),(self.act_open_output,"open_output"),(self.act_open_download,"open_download"),(self.act_reset_collection,"reset_collection"),(self.act_exit,"exit"),(self.act_undo,"undo"),(self.act_redo,"redo"),(self.act_reset_results,"reset_results"),(self.act_clear,"clear"),(self.act_browser_settings,"browser_settings"),(self.act_clear_web_components,"clear_web_components"),(self.act_reset_settings,"reset_settings"),(self.act_guide,"user_guide"),(self.act_params,"parameter_guide"),(self.act_about,"about")):
             act.setText(tr(l, key))
         self.google_panel.retranslate_ui(); self.baidu_panel.retranslate_ui()
 
@@ -3655,13 +4076,14 @@ class BFSUWebLensWindow(QMainWindow):
               <li><b>Prepare the browser environment for automatic collection.</b> Under <i>Settings → Browser &amp; Selenium</i>, One-click configure checks both Chrome and Edge, uses an isolated portable Chrome by default and the system-installed Microsoft Edge by default, prepares matching WebDrivers and shows configuration progress. <i>Update selected portable browser &amp; WebDriver</i> checks the current official stable release and safely prepares a newer WebLens-managed version when available. Independent Detect/Download/Browse controls remain available for manual recovery. Automatic collection remains locked until the selected browser and Driver are compatible; Manual collection remains available without Selenium.</li>
               <li><b>Select a search engine.</b> Google and Baidu share the application-wide browser/Driver configuration while keeping separate search parameters and result lists.</li>
               <li><b>Use Manual collection when preferred.</b> WebLens generates one or more initial search URLs from the current parameters. Open them in your normal browser, turn pages manually, save every result page as HTML, then import those files in the Manual collection window. Parsed links are deduplicated and appended to Result Preview, after which the normal full-text download workflow applies.</li>
-              <li><b>Enter search terms and optional site/domain filters.</b> Each line may contain one term or one domain. For Baidu, multiple terms and multiple domains are expanded into separate term × domain search tasks; WebLens never auto-joins those dimensions with OR.</li>
+              <li><b>Enter search terms and optional site/domain filters.</b> Each line may contain one term or one domain. In Google OR modes, WebLens automatically splits more than eight terms into fixed internal batches of at most eight; there is no user-adjustable batch-size parameter. For Baidu, multiple terms and multiple domains are expanded into separate term × domain search tasks, so Baidu never builds an overlong OR query. <b>Known issue:</b> in Google News, adding a site/domain restriction may trigger Google's own human-verification and automatic redirect handling; after verification Google may switch the visible result type from News to All/Web. This is an observed Google-side verification/redirect behavior rather than a WebLens query-construction error. If it occurs, manually return to the News result page before confirming continuation in WebLens.</li>
               <li><b>Use date restriction only when needed.</b> It is off by default, so no date parameter is sent. When enabled, Start date and End date become active and WebLens prevents the start date from being later than the end date.</li>
-              <li><b>Collect links.</b> Start collection and Stop control search-engine collection only. WebLens does not set page size or a maximum page count and follows only the search engine's own Next link.</li>
-              <li><b>Complete human verification in the browser.</b> WebLens pauses all navigation commands while a verification page is present. After verification, it waits for the real result DOM and resumes from the page already open.</li>
-              <li><b>Import or paste existing links when needed.</b> TXT supports one URL per line; XLSX/CSV can place URLs in the first column; WebLens exports can be re-imported. <i>Paste links from text</i> extracts HTTP/HTTPS links from prose, HTML or Markdown and appends them to the current Result Preview. Imported links may have no title initially.</li>
-              <li><b>Review results.</b> Open, delete, sort and sample records in Result Preview. The Published column is displayed as DD-MM-YYYY and sorted chronologically after parsing common absolute and relative search-engine date formats; the original publication-time text remains stored in the record. Google News may expose an opaque Google <code>/goto</code> result redirect. During automatic collection WebLens first asks Google for the redirect target and stores the direct external URL when available; unresolved redirects are retained as a safe fallback and can still be replaced after successful content downloading.</li>
-              <li><b>Download content.</b> Configure download settings once, then use Download selected content or Download all content. Stop download is independent from Stop collection. Successful downloading can complete missing title, publication time and final URL information.</li>
+              <li><b>Start or continue collection.</b> <i>Start new collection</i> clears the current preview/checkpoint and begins from the current settings. If an interrupted task has a checkpoint and Result Preview still contains collected links, <i>Continue previous collection</i> reopens the previous result page, deduplicates already collected links, and continues forward. Stop affects search collection only.</li>
+              <li><b>Complete human verification in the browser.</b> When a verification page is detected, WebLens fully pauses and shows a confirmation dialog. While that dialog remains open, WebLens does not inspect, refresh, paginate, restart or navigate the browser. Complete the challenge manually and make sure the desired result page is visibly ready; if Google has switched tabs or changed the date filter, correct it manually before returning to WebLens. Click <i>Verification complete, continue</i> only when the page is ready. WebLens then parses the page currently open in the browser without forcing or restoring the address.</li>
+              <li><b>Import or paste existing links when needed.</b> WebLens result files (XLSX/CSV/TXT/DOCX/XML) can carry crawl state. Importing such a file restores its Result Preview, search settings and resume checkpoint. A file with no WebLens crawl-state metadata remains an ordinary link import and does not create a resume state. <i>Paste links from text</i> still appends ordinary HTTP/HTTPS links only.</li>
+              <li><b>Review results.</b> Open, delete selected, delete all, sort and sample records in Result Preview. <i>Delete all</i> removes every current item only; it does not reset search/collection settings or the crawl checkpoint, and the deletion can be undone immediately. The Published column is displayed as DD-MM-YYYY and sorted chronologically after parsing common absolute and relative search-engine date formats; the original publication-time text remains stored in the record. Google result extraction now treats the visible result card as the unit of collection. WebLens reads the principal title/result anchor only, ignores auxiliary links such as Translate/read-more links, prefers a direct external URL when the card exposes one, and otherwise keeps the card's Google <code>/goto</code> link for redirect resolution. After redirect resolution, normalized final URLs are deduplicated before records are emitted.</li>
+              <li><b>Download content.</b> Configure download settings once, then use Download selected content or Download all content. Stop download is independent from Stop collection. Before content download, records collected by Google/Baidu, imported from files, pasted from text or parsed from saved search-result HTML use the destination URL's main/registrable domain in <i>Source</i> (for example <code>j.people.com.cn → people.com.cn</code>). After a destination page is downloaded, a reliably detected source/publication/site/organization name replaces that domain fallback; if no such name is detected, Source remains the main domain. Downloading can also complete missing title, actual domain and final URL information; when the destination page exposes a reliable publication time, that page-level value replaces the provisional time collected from the search-result page.</li>
+              <li><b>Reset a collection when starting a different project.</b> <i>Reset collection</i>, placed beside Open download folder, clears Result Preview and the crawl checkpoint and restores this engine panel's query, collection, result-language/country-region selections, collected-link output and content-download settings to their defaults. Browser/Selenium configuration and files already saved on disk are preserved.</li>
             </ol>
             """
         elif lang == "zh_tra":
@@ -3674,13 +4096,14 @@ class BFSUWebLensWindow(QMainWindow):
               <li><b>自動採集前配置瀏覽器環境。</b> 在「設定 → 瀏覽器與 Selenium」中預設使用 WebLens tools 內的便攜版瀏覽器；系統已安裝瀏覽器僅作為用戶主動選擇的「不推薦」備選。一鍵配置可準備瀏覽器與匹配的 WebDriver；「更新當前內置便攜版瀏覽器與 WebDriver」可主動檢查官方最新穩定版並安全更新。下方仍保留獨立的偵測、下載與瀏覽按鈕。瀏覽器與 Driver 未匹配時自動採集保持鎖定；手動採集不依賴 Selenium，仍可使用。</li>
               <li><b>選擇搜索引擎。</b> Google 和百度共用應用級瀏覽器/Driver 設定，但各自保留獨立的檢索參數和結果列表。</li>
               <li><b>可使用手動採集。</b> WebLens 依照目前參數產生一個或多個初始檢索連結；用戶在日常瀏覽器中開啟、手動翻頁並把每一頁儲存為 HTML，再回到「手動採集」視窗批次匯入。解析出的連結去重後追加到結果預覽，之後仍使用既有正文下載流程。</li>
-              <li><b>填寫檢索詞和可選的站點/域名。</b> 每行可填一個檢索詞或一個域名。百度會把多個檢索詞和多行站點/域名展開為「檢索詞 × 域名」獨立任務逐項搜索，WebLens 不使用 OR 自動連接這兩個維度。</li>
+              <li><b>填寫檢索詞和可選的站點/域名。</b> 每行可填一個檢索詞或一個域名。Google 的 OR 模式若超過 8 個檢索詞，WebLens 會在內部自動按每批最多 8 個拆分；此批次大小固定，不提供用戶參數。百度多檢索詞仍按逐條任務執行，因此不會形成過長 OR。<b>已知問題：</b>在 Google News 中加入站點/域名限定時，Google 自身的人工驗證與自動跳轉機制可能被觸發；驗證後 Google 可能把可見結果類型由「新聞」切換到「全部/網頁」。這是已觀察到的 Google 端驗證/跳轉行為，不是 WebLens 的檢索式構造錯誤。若遇到此情況，請先在瀏覽器中手動返回「新聞」結果頁，再回到 WebLens 確認繼續採集。</li>
               <li><b>按需限定日期。</b> 日期限定預設關閉，因此不向搜索引擎發送日期參數。啟用後才可設定開始/結束日期，且開始日期不會晚於結束日期。</li>
-              <li><b>採集連結。</b>「開始採集」和「停止」只控制搜索結果採集。WebLens 不設定每頁結果數和最大頁數，只跟隨搜索引擎自身提供的「下一頁」。</li>
-              <li><b>人工驗證。</b> 出現驗證頁時，WebLens 停止發送導航指令；用戶在瀏覽器中完成驗證後，軟體等待真實結果 DOM 穩定，再從當前頁面恢復。</li>
-              <li><b>匯入或貼上已有連結。</b> TXT 可每行一個 URL；XLSX/CSV 可將 URL 放在首列；WebLens 自己匯出的檔案也可重新匯入。「貼上文字解析連結」可從普通文字、HTML 或 Markdown 中抽取 HTTP/HTTPS 連結並追加到當前結果列表。匯入時標題可以暫時為空。</li>
-              <li><b>整理結果。</b> 可在結果預覽中開啟、刪除、排序和抽樣。Published/發布時間統一以 DD-MM-YYYY（日-月-年）顯示，排序時會先解析常見絕對日期與相對時間後按實際日期排序，原始時間文字仍保留在記錄中。Google 新聞有時會提供不透明的 Google <code>/goto</code> 跳轉連結；自動採集時 WebLens 會先向 Google 取得跳轉目標並直接保存外部 URL。若當次無法解析，仍保留 <code>/goto</code> 作為安全後備，正文下載成功後可再次替換為最終 URL。</li>
-              <li><b>下載正文。</b> 下載參數只需設定一次；「停止下載」與「停止採集」彼此獨立。下載成功後可補全缺失的標題、發布時間和最終 URL。</li>
+              <li><b>開始或繼續採集。</b>「開始新的採集」會清空當前結果預覽與舊斷點，按目前參數從頭開始；若中斷任務仍有結果和斷點，「繼續上一採集」會從上一個結果頁安全回退一頁，對已有連結去重後繼續向後採集。「停止」只控制搜索結果採集。</li>
+              <li><b>人工驗證。</b> 出現驗證頁時，WebLens 會完全暫停並保持確認視窗開啟；在用戶明確確認之前，不檢查、不刷新、不翻頁、不重啟，也不重新導航瀏覽器。請在瀏覽器中完成人工驗證，並確認需要的結果頁已正常顯示；若 Google 切換了標籤或日期條件，可先手動調整。回到 WebLens 點擊「驗證完成，繼續採集」後，軟體才直接解析當前頁面，不強制改寫地址。</li>
+              <li><b>匯入或貼上已有連結。</b> WebLens 匯出的 XLSX、CSV、TXT、DOCX、XML 可同步保存採集斷點；重新匯入時若讀到狀態，會恢復結果、檢索設定和可繼續採集位置。普通檔案若沒有狀態，仍按一般連結匯入，不會建立斷點。「貼上文字解析連結」仍只追加普通 HTTP/HTTPS 連結。</li>
+              <li><b>整理結果。</b> 可在結果預覽中開啟、刪除所選、刪除全部、排序和抽樣。「刪除全部」只清空目前結果項目，不重置檢索/採集設定或採集斷點，且可立即使用復原恢復。Published/發布時間統一以 DD-MM-YYYY（日-月-年）顯示，排序時會先解析常見絕對日期與相對時間後按實際日期排序，原始時間文字仍保留在記錄中。Google 結果解析現在以「可見結果卡片」為採集單位，只讀取主要標題/結果連結，不再把 Translate、Read more 等卡片內輔助連結當成額外結果。卡片若提供真實外部 URL 則優先使用；否則保留該卡片的 Google <code>/goto</code> 連結並嘗試解析跳轉目標。解析後再按規範化最終 URL 去重。</li>
+              <li><b>下載正文。</b> 下載參數只需設定一次；「停止下載」與「停止採集」彼此獨立。Google/百度採集、檔案匯入、貼上文字解析連結以及手動匯入搜索結果 HTML 在下載前都以目標 URL 的主域名填寫「來源」（例如 <code>j.people.com.cn → people.com.cn</code>）。正文下載後若能可靠識別來源/出版物/站點/機構名稱，會用該名稱更新「來源」；識別不到則保留主域名。下載亦可補全缺失的標題、實際域名和最終 URL；若目標頁面能可靠識別發布時間，該頁面級時間會覆蓋搜索結果頁階段暫存的時間。</li>
+              <li><b>開始另一個任務時可使用「重置採集」。</b> 該按鈕位於「打開下載文件夾」右側，會清空當前結果和採集斷點，並把本搜索引擎面板的檢索、採集、結果語種/國家地區目前選擇、採集連結保存與正文下載設定恢復預設；瀏覽器/Selenium 配置和磁碟上已有檔案不會被刪除。</li>
             </ol>
             """
         else:
@@ -3693,13 +4116,14 @@ class BFSUWebLensWindow(QMainWindow):
               <li><b>自动采集前配置浏览器环境。</b> 在“设置 → 浏览器与 Selenium”中默认使用 WebLens tools 内的便携版浏览器；系统已安装浏览器仅作为用户主动选择的“不推荐”备选。一键配置可准备浏览器与匹配的 WebDriver；“更新当前内置便携版浏览器与 WebDriver”可主动检查官方最新稳定版并安全更新。下方仍保留独立的检测、下载与浏览按钮。浏览器与 Driver 未匹配时，自动采集保持锁定；手动采集不依赖 Selenium，仍可使用。</li>
               <li><b>选择搜索引擎。</b> Google 和百度共用应用级浏览器/Driver 设置，但各自保留独立的检索参数和结果列表。</li>
               <li><b>可使用手动采集。</b> WebLens 根据当前参数生成一个或多个初始检索链接；用户在日常浏览器中打开、手动翻页并把每一页保存为 HTML，再回到“手动采集”窗口批量导入。解析出的链接去重后追加到结果预览，之后仍使用现有正文下载流程。</li>
-              <li><b>填写检索词和可选的站点/域名。</b> 每行可填写一个检索词或一个域名。百度会把多个检索词和多行站点/域名展开为“检索词 × 域名”独立任务逐项搜索，WebLens 不使用 OR 自动连接这两个维度。</li>
+              <li><b>填写检索词和可选的站点/域名。</b> 每行可填写一个检索词或一个域名。Google 的 OR 模式如果超过 8 个检索词，WebLens 会在内部自动按每批最多 8 个拆分；这个批次大小固定，不提供用户参数。百度多检索词仍按逐条任务执行，因此不会形成过长 OR。<b>已知问题：</b>在 Google News 中加入站点/域名限定时，Google 自身的人工验证与自动跳转机制可能被触发；验证后 Google 可能把可见结果类型从“新闻”切换到“全部/网页”。这是已观察到的 Google 端验证/跳转行为，不是 WebLens 的检索式构造错误。若遇到这种情况，请先在浏览器中手动返回“新闻”结果页，再回到 WebLens 确认继续采集。</li>
               <li><b>按需限定日期。</b> 日期限定默认关闭，因此不会向搜索引擎发送日期参数。启用后才可设置开始/结束日期，并自动保证开始日期不晚于结束日期。</li>
-              <li><b>采集链接。</b>“开始采集”和“停止”只控制搜索结果采集。WebLens 不设置每页结果数，也不设置最大页数，只跟随搜索引擎页面自身提供的“下一页”。</li>
-              <li><b>人工验证。</b> 出现验证页时，WebLens 停止发送导航指令；用户在浏览器中完成验证后，软件等待真实结果 DOM 稳定，再从当前页面恢复采集。</li>
-              <li><b>导入或粘贴已有链接。</b> TXT 支持每行一个 URL；XLSX/CSV 可把 URL 放在首列；WebLens 自己导出的文件也可重新导入。“粘贴文本解析链接”可从普通文字、HTML 或 Markdown 中抽取 HTTP/HTTPS 链接，并追加到当前结果列表。导入时标题可以暂时为空。</li>
-              <li><b>整理结果。</b> 可在结果预览中打开、删除、排序和抽样。Published/发布时间统一以 DD-MM-YYYY（日-月-年）显示，排序时会先解析常见绝对日期与相对时间后按实际日期排序，原始时间文字仍保留在记录中。Google 新闻有时会提供不透明的 Google <code>/goto</code> 跳转链接；自动采集时 WebLens 会先向 Google 获取跳转目标并直接保存外部 URL。若当次无法解析，仍保留 <code>/goto</code> 作为安全回退，正文下载成功后还可再次替换为最终 URL。</li>
-              <li><b>下载正文。</b> 下载参数只设置一次；“停止下载”与“停止采集”彼此独立。下载成功后可以补全缺失的标题、发布时间和最终 URL。</li>
+              <li><b>开始或继续采集。</b>“开始新的采集”会清空当前结果预览与旧断点，按照当前参数从头开始；如果中断任务仍有结果和断点，“继续上一采集”会从上一个结果页安全回退一页，对已有链接去重后继续向后采集。“停止”只控制搜索结果采集。</li>
+              <li><b>人工验证。</b> 出现验证页时，WebLens 会完全暂停并保持确认窗口打开；在用户明确确认之前，不检查、不刷新、不翻页、不重启，也不重新导航浏览器。请在浏览器中完成人工验证，并确认需要的结果页面已经正常显示；如果 Google 切换了标签或日期条件，可以先手动调整。回到 WebLens 点击“验证完成，继续采集”后，软件才直接解析当前页面，不强制改写浏览器地址。</li>
+              <li><b>导入或粘贴已有链接。</b> WebLens 导出的 XLSX、CSV、TXT、DOCX、XML 可同步保存采集断点；重新导入时如果读取到状态，会恢复结果、检索设置和可继续采集位置。普通文件如果没有状态，仍按一般链接导入，不会建立断点。“粘贴文本解析链接”仍只追加普通 HTTP/HTTPS 链接。</li>
+              <li><b>整理结果。</b> 可在结果预览中打开、删除所选、删除全部、排序和抽样。“删除全部”只清空当前结果项目，不重置检索/采集设置或采集断点，而且可以立即使用撤销恢复。Published/发布时间统一以 DD-MM-YYYY（日-月-年）显示，排序时会先解析常见绝对日期与相对时间后按实际日期排序，原始时间文字仍保留在记录中。Google 结果解析现在以“可见结果卡片”为采集单位，只读取主要标题/结果链接，不再把 Translate、Read more 等卡片内辅助链接当成额外结果。卡片如果提供真实外部 URL则优先使用；否则保留该卡片的 Google <code>/goto</code> 链接并尝试解析跳转目标。解析完成后再按规范化最终 URL 去重。</li>
+              <li><b>下载正文。</b> 下载参数只设置一次；“停止下载”与“停止采集”彼此独立。Google/百度抓取、文件导入、粘贴文本解析链接以及手动导入搜索结果 HTML 在下载前都以目标 URL 的主域名填写“来源”（例如 <code>j.people.com.cn → people.com.cn</code>）。正文下载后如果能够可靠识别来源/出版物/站点/机构名称，会用该名称更新“来源”；识别不到则保留主域名。下载还可补全缺失的标题、实际域名和最终 URL；如果目标页面能够可靠识别发布时间，该页面级时间会覆盖搜索结果页阶段暂存的时间。</li>
+              <li><b>开始另一个任务时可使用“重置采集”。</b> 该按钮位于“打开下载文件夹”右侧，会清空当前结果和采集断点，并将本搜索引擎面板的检索、采集、结果语种/国家地区当前选择、采集链接保存和正文下载设置恢复默认；浏览器/Selenium 配置和磁盘上已经保存的文件不会被删除。</li>
             </ol>
             """
         self._show_help_dialog(title, subtitle, html)
@@ -3711,57 +4135,75 @@ class BFSUWebLensWindow(QMainWindow):
             subtitle = "Meaning and scope of collection parameters"
             html = """
             <h2>Parameter Guide</h2>
-            <p><b>Search mode.</b> Google supports single term, OR, all terms, exact phrase, multiple exact phrases and raw queries. Baidu's multiple-term mode sends each non-empty line as a separate task. Multiple Baidu site/domain filters are also searched separately; the execution plan is term × domain × date slice, with no WebLens-generated OR between terms or domains.</p>
+            <p><b>Search mode.</b> Google supports single term, OR, all terms, exact phrase, multiple exact phrases and raw queries. In Google OR-composed modes, more than eight terms are automatically divided into fixed internal batches of at most eight; this batch size is not user-configurable. Baidu's multiple-term mode sends each non-empty line as a separate task. Multiple Baidu site/domain filters are also searched separately.</p>
+            <p><b>Resume collection.</b> WebLens stores a crawl checkpoint with task/batch, date slice, page number and page URLs. Continue previous collection deliberately reopens the previous page (page 1 if necessary), seeds deduplication from Result Preview, and then follows the engine's Next links forward.</p>
+            <p><b>Result-file crawl state.</b> XLSX, CSV, TXT, DOCX and XML exports can embed the checkpoint. Importing a WebLens file with state restores the matching engine panel and checkpoint; files without state remain ordinary URL/result imports.</p>
             <p><b>Search vertical.</b> Google supports Web and News. Baidu supports Web, News/Information and media-site News.</p>
+            <p><b>Known issue: Google News + site/domain restriction.</b> A Google News query that includes a <code>site:</code> restriction may trigger Google's own human-verification and automatic redirect handling. After verification, Google may display All/Web instead of News. This is an observed Google-side behavior rather than a WebLens query-construction error. WebLens does not attempt to bypass or override Google's verification mechanism; if the result type changes, return to News manually before confirming continuation.</p>
             <p><b>Language and region.</b> Google language and country/region restrictions are optional.</p>
             <p><b>Date restriction.</b> Off by default. When disabled, no date-range parameter is sent. When enabled, the selected range can be split by Date-slice step; 0 keeps the entire range as one slice.</p>
             <p><b>Page-turn wait.</b> The range is entered in seconds for readability. WebLens converts the two endpoints to milliseconds internally and chooses a random wait at millisecond granularity between result pages, between date slices and before the one retry after a transient page-load error.</p>
             <p><b>Pagination.</b> WebLens has no page-size setting and no maximum-page setting. It loads the default first page and follows only the search engine's own Next link.</p>
             <p><b>Manual collection.</b> This mode uses the same query/date/language/region settings only to generate initial search URLs. It performs no automated navigation and needs no Selenium environment. Saved Google/Baidu result-page HTML files can be imported repeatedly; links are extracted, deduplicated and appended to Result Preview.</p>
-            <p><b>Human verification.</b> While verification is present, WebLens sends no refresh, pagination, browser-restart or new-page navigation command. Collection resumes only after the live result DOM becomes stable.</p>
-            <p><b>Google News redirect links.</b> Current Google News may expose story cards through an opaque Google <code>/goto?url=...</code> link. Automatic collection resolves that Google redirect without following the destination article and stores the external target directly when Google returns one. If resolution fails, the redirect remains a valid result-card fallback and the full-text downloader can still replace it later.</p>
-            <p><b>Empty results.</b> Search-engine UI/navigation links are excluded. A genuine empty Baidu unit ends that unit and WebLens continues with the next date slice or term/domain task when available.</p>
+            <p><b>Human verification.</b> WebLens does not poll or navigate the browser while the verification dialog is open. After completing the challenge, visually confirm the desired result page and click <i>Verification complete, continue</i>. WebLens then reads the page already open in the browser. It does not force a News/Web vertical, restore the URL, or refresh the page.</p>
+            <p><b>Google News redirect links.</b> Google result parsing is card-based. WebLens takes one principal result/title anchor per visible card and does not treat auxiliary Translate/read-more/tracking anchors as separate results. If the card exposes a direct external URL, that URL is preferred. Otherwise its opaque Google <code>/goto?url=...</code> link is retained and automatic collection attempts to resolve it through Google's redirect endpoint. After resolution, normalized final URLs are deduplicated. Result Preview itself performs deterministic URL deduplication only; it does not infer duplicate stories from titles, sources or publication times.</p>
+            <p><b>Delete all in Result Preview.</b> This command deletes all current preview items only. It does not change search parameters, collection parameters, the saved crawl checkpoint, browser settings or files already written to disk. The operation is added to the result-edit undo stack.</p>
+            <p><b>Empty results.</b> Search-engine UI/navigation links are excluded. A genuine empty search unit ends only that unit; WebLens continues with the next date slice, Google OR batch, or Baidu term/domain task when available.</p>
+            <p><b>Reset collection.</b> Reset collection clears the active engine panel's results/checkpoint and restores its query, collection, current result-language/country-region selections, link-output and content-download settings. Global Browser/Selenium configuration and files already saved to disk are preserved.</p>
             <p><b>Browser and WebDriver setup.</b> One-click configuration checks Chrome and Edge, uses an isolated portable Chrome by default and the system-installed Microsoft Edge by default, and prepares a version-compatible Driver with visible progress. The portable-update action applies to the WebLens-managed Chrome environment and can upgrade Chrome side-by-side with its exact matching ChromeDriver. Edge uses the system-installed Microsoft Edge browser and WebLens prepares an EdgeDriver matched to that installed version. Manual Browser/Driver paths are validated immediately, and collection preflight checks them again before every crawl.</p>
             <p><b>Browser rendering.</b> Page render wait is application-wide and defaults to 5000 ms.</p>
-            <p><b>Content downloading.</b> This is separate from search-result collection. Requests/Selenium/Mixed options apply only to already collected destination pages; Google/Baidu result-page collection itself is browser-only.</p>
+            <p><b>Source field.</b> Search collection, ordinary file import, pasted-link import and saved search-result HTML import all set Source to the destination URL's main/registrable domain. The more specific host remains in Actual domain. During successful destination-page download, WebLens may replace Source with a reliably detected <code>source_name</code>, publication, site name, publisher or organization; if none is detected, it falls back to the main domain.</p>
+            <p><b>Content downloading.</b> This is separate from search-result collection. Requests/Selenium/Mixed options apply only to already collected destination pages; Google/Baidu result-page collection itself is browser-only. The existing content-download resume mechanism based on <code>content_manifest.jsonl</code> remains independent from the new search-collection checkpoint and is not reset or replaced by it.</p>
             """
         elif lang == "zh_tra":
             title = "BFSU WebLens — 參數說明"
             subtitle = "採集參數的含義與適用範圍"
             html = """
             <h2>參數說明</h2>
-            <p><b>檢索模式。</b> Google 支援單個檢索詞、OR、多詞全部包含、嚴格短語、多個嚴格短語和原始檢索式。百度多檢索詞模式會將每個非空行作為獨立任務；多行站點/域名也會分別執行，因此完整任務為「檢索詞 × 域名 × 日期切片」，WebLens 不生成連接檢索詞或域名的 OR。</p>
+            <p><b>檢索模式。</b> Google 支援單個檢索詞、OR、多詞全部包含、嚴格短語、多個嚴格短語和原始檢索式。Google 的 OR 組合模式超過 8 個詞時自動按每批最多 8 個拆分，批次大小為內部固定規則，不提供用戶設定。百度多檢索詞模式仍逐條執行。</p>
+            <p><b>斷點續爬。</b> WebLens 記錄任務/批次、日期切片、頁碼和頁面 URL。「繼續上一採集」會從上一個結果頁重新開始，使用結果預覽已有連結去重後再向後翻頁。</p>
+            <p><b>結果檔案中的採集狀態。</b> XLSX、CSV、TXT、DOCX、XML 可隨結果保存斷點；匯入含狀態的 WebLens 檔案會恢復對應面板和斷點，沒有狀態的普通檔案仍只作連結/結果匯入。</p>
             <p><b>檢索類型。</b> Google 支援網頁和新聞；百度支援網頁、資訊以及媒體網站資訊。</p>
+            <p><b>已知問題：Google News + 站點/域名限定。</b> Google News 檢索式包含 <code>site:</code> 限定時，可能觸發 Google 自身的人工驗證與自動跳轉；驗證後 Google 可能顯示「全部/網頁」而不是「新聞」。這是已觀察到的 Google 端行為，不是 WebLens 的檢索式構造錯誤。WebLens 不嘗試繞過或強制改寫 Google 的驗證機制；若結果類型被切換，請先手動返回「新聞」再確認繼續採集。</p>
             <p><b>語種與區域。</b> Google 的結果語種和國家/地區限定均為可選。</p>
             <p><b>日期限定。</b> 預設關閉。關閉時不發送日期範圍；開啟後才使用選定日期，切片步長為 0 時整個範圍作為一個切片。</p>
             <p><b>翻頁等待。</b> 界面以秒為單位設定範圍；WebLens 內部轉換為毫秒，並在兩個端點之間按毫秒粒度隨機取值。結果翻頁、日期切片之間以及臨時頁面載入錯誤後的單次重試均使用這一範圍。</p>
             <p><b>翻頁方式。</b> WebLens 不設定每頁結果數，也不設定最大頁數，只跟隨搜索引擎自身的「下一頁」。</p>
             <p><b>手動採集。</b> 此模式只使用相同的檢索詞、日期、語種與區域等參數來產生初始搜索連結，不進行任何自動導航，也不需要 Selenium。用戶可反覆匯入手動儲存的 Google/百度搜索結果 HTML，WebLens 解析、去重後追加到結果預覽。</p>
-            <p><b>人工驗證。</b> 驗證期間不刷新、不翻頁、不重啟瀏覽器，也不開啟新搜索頁；只有實時結果 DOM 穩定後才恢復。</p>
-            <p><b>Google 新聞跳轉連結。</b> 當前 Google 新聞可能使用不透明的 <code>/goto?url=...</code> 作為新聞卡片主連結。自動採集會先解析 Google 的 HTTP 跳轉而不下載目標文章，能取得目標時直接保存外部 URL；解析失敗時保留跳轉連結，正文下載流程仍可再次跟隨並替換。</p>
-            <p><b>真實空結果。</b> 搜索引擎界面和導航連結不算結果。百度某個具體任務出現真實空頁時，只結束該任務，仍會繼續下一個日期切片或下一個檢索詞/域名任務。</p>
+            <p><b>人工驗證。</b> 驗證提示視窗保持開啟期間，WebLens 不輪詢也不導航瀏覽器。用戶完成驗證並目視確認需要的結果頁後，點擊「驗證完成，繼續採集」，軟體才讀取目前頁面；不強制檢查 News/Web 類型、不恢復 URL，也不刷新頁面。</p>
+            <p><b>Google 新聞跳轉連結。</b> Google 結果解析改為以可見結果卡片為單位，每張卡片只提取一個主要標題/結果連結，不把 Translate、Read more、追蹤等輔助連結視為獨立結果。卡片若直接提供外部 URL 則優先使用；否則保留其 <code>/goto?url=...</code>，由自動採集嘗試透過 Google 跳轉端點解析。解析後再按規範化最終 URL 去重。Result Preview 僅做確定性的 URL 去重，不再根據標題、來源或發布時間推測兩條記錄是否為同一新聞。</p>
+            <p><b>結果預覽「刪除全部」。</b> 此操作只刪除目前預覽中的全部項目，不修改檢索參數、採集參數、已保存採集斷點、瀏覽器設定或磁碟上已寫入的檔案，並會進入結果編輯的復原堆疊。</p>
+            <p><b>真實空結果。</b> 搜索引擎界面和導航連結不算結果。某個具體搜索單元出現真實空頁時，只結束當前單元，後續日期切片、Google OR 批次或百度任務仍繼續。</p>
+            <p><b>重置採集。</b>「重置採集」只重置當前搜索引擎面板，清空結果與斷點、明確清除結果語種/國家地區選擇並恢復相關任務設定；全局瀏覽器/Selenium 配置和磁碟已有檔案不刪除。</p>
             <p><b>瀏覽器與 WebDriver 配置。</b> 預設使用 WebLens 便攜版瀏覽器，系統安裝版僅作為明確標示「不推薦」的用戶主動備選。一鍵配置會準備可用瀏覽器與版本匹配的 Driver；便攜版更新功能可檢查官方最新穩定版，Chrome 可與精確匹配的 ChromeDriver 一併更新；內置 Edge 可更新匹配的 EdgeDriver，但因微軟沒有官方便攜 Edge ZIP，WebLens 不會自動替換 Edge 瀏覽器本體。手動 Browser/Driver 路徑會立即驗證，開始採集前還會再次預檢。</p>
             <p><b>瀏覽器渲染。</b> 頁面渲染等待為應用級設定，預設 5000 ms。</p>
-            <p><b>正文下載。</b> 正文下載與搜索結果採集分離；Requests/Selenium/Mixed 僅作用於已採集的目標頁面，Google/百度結果頁採集本身始終為瀏覽器模式。</p>
+            <p><b>來源欄位。</b> 自動採集、普通檔案匯入、貼上連結以及手動匯入搜索結果 HTML 在下載正文前，均以目標 URL 的主域名填寫「來源」；更具體的子域名保留在 Actual domain。正文下載成功後，若頁面元資料可靠識別出 source_name、出版物、站點名稱、出版機構或組織名稱，則以該名稱更新「來源」；否則回退為主域名。</p>
+            <p><b>正文下載。</b> 正文下載與搜索結果採集分離；Requests/Selenium/Mixed 僅作用於已採集的目標頁面，Google/百度結果頁採集本身始終為瀏覽器模式。既有基於 <code>content_manifest.jsonl</code> 的正文下載斷點續下機制與新的搜索採集斷點彼此獨立，完整保留。</p>
             """
         else:
             title = "BFSU WebLens — 参数说明"
             subtitle = "采集参数的含义与适用范围"
             html = """
             <h2>参数说明</h2>
-            <p><b>检索模式。</b> Google 支持单个检索词、OR、多词全部包含、严格短语、多个严格短语和原始检索式。百度多检索词模式会把每个非空行作为独立任务；多行站点/域名也会分别执行，因此完整任务为“检索词 × 域名 × 日期切片”，WebLens 不生成连接检索词或域名的 OR。</p>
+            <p><b>检索模式。</b> Google 支持单个检索词、OR、多词全部包含、严格短语、多个严格短语和原始检索式。Google 的 OR 组合模式超过 8 个词时自动按每批最多 8 个拆分，批次大小为内部固定规则，不提供用户设置。百度多检索词模式仍把每个非空行作为独立任务，多行站点/域名也分别执行。</p>
+            <p><b>断点续爬。</b> WebLens 会记录检索任务/批次、日期切片、页码和页面 URL。“继续上一采集”会有意从上一个结果页重新开始（必要时从第 1 页），并用结果预览中的已有链接做全局去重，再继续跟随搜索引擎的“下一页”。</p>
+            <p><b>结果文件中的采集状态。</b> XLSX、CSV、TXT、DOCX、XML 均可随结果保存断点。导入含状态的 WebLens 文件时会恢复对应搜索引擎面板和断点；没有状态的普通文件仍只作为链接/结果导入。</p>
             <p><b>检索类型。</b> Google 支持网页和新闻；百度支持网页、资讯以及媒体网站资讯。</p>
+            <p><b>已知问题：Google News + 站点/域名限定。</b> Google News 检索式包含 <code>site:</code> 限定时，可能触发 Google 自身的人工验证与自动跳转；验证后 Google 可能显示“全部/网页”而不是“新闻”。这是已观察到的 Google 端行为，不是 WebLens 的检索式构造错误。WebLens 不尝试绕过或强制改写 Google 的验证机制；如果结果类型被切换，请先手动返回“新闻”再确认继续采集。</p>
             <p><b>语种与区域。</b> Google 的结果语种和国家/地区限定均为可选；中文界面的名称后附英文名称。</p>
             <p><b>日期限定。</b> 默认关闭。关闭时不发送日期范围；开启后才使用选定日期，日期切片步长为 0 时整个范围作为一个切片。</p>
             <p><b>翻页等待。</b> 界面以秒为单位设置范围；WebLens 内部转换为毫秒，并在两个端点之间按毫秒粒度随机取值。结果翻页、日期切片之间以及临时页面加载错误后的单次重试均使用这一范围。</p>
             <p><b>翻页方式。</b> WebLens 不设置每页结果数，也不设置最大页数，只跟随搜索引擎自身提供的“下一页”。</p>
             <p><b>手动采集。</b> 此模式只使用相同的检索词、日期、语种与区域等参数生成初始搜索链接，不进行任何自动导航，也不需要 Selenium。用户可反复导入手动保存的 Google/百度搜索结果 HTML，WebLens 解析、去重后追加到结果预览。</p>
-            <p><b>人工验证。</b> 验证期间不刷新、不翻页、不重启浏览器，也不打开新的搜索页；只有实时结果 DOM 稳定后才恢复。</p>
-            <p><b>Google 新闻跳转链接。</b> 当前 Google 新闻可能使用不透明的 <code>/goto?url=...</code> 作为新闻卡片主链接。自动采集会先解析 Google 的 HTTP 跳转而不下载目标文章，能取得目标时直接保存外部 URL；解析失败时保留跳转链接，正文下载流程仍可再次跟随并替换。</p>
-            <p><b>真实空结果。</b> 搜索引擎界面和导航链接不算结果。百度某个具体任务出现真实空页时，只结束该任务，仍会继续下一个日期切片或下一个检索词/域名任务。</p>
+            <p><b>人工验证。</b> 验证提示窗口保持打开期间，WebLens 不轮询也不导航浏览器。用户完成验证并目视确认需要的结果页面后，点击“验证完成，继续采集”，软件才读取当前页面；不强制检查 News/Web 类型、不恢复 URL，也不刷新页面。</p>
+            <p><b>Google 新闻跳转链接。</b> Google 结果解析改为以可见结果卡片为单位，每张卡片只提取一个主要标题/结果链接，不把 Translate、Read more、追踪等辅助链接视为独立结果。卡片如果直接提供外部 URL 则优先使用；否则保留其 <code>/goto?url=...</code>，由自动采集尝试通过 Google 跳转端点解析。解析后再按规范化最终 URL 去重。Result Preview 只做确定性的 URL 去重，不再根据标题、来源或发布时间推测两条记录是否为同一新闻。</p>
+            <p><b>结果预览“删除全部”。</b> 此操作只删除当前预览中的全部项目，不修改检索参数、采集参数、已保存采集断点、浏览器设置或磁盘上已经写入的文件，并会进入结果编辑的撤销栈。</p>
+            <p><b>真实空结果。</b> 搜索引擎界面和导航链接不算结果。某个具体搜索单元出现真实空页时，只结束当前单元，后续日期切片、Google OR 批次或百度检索词/域名任务仍继续。</p>
+            <p><b>重置采集。</b>“重置采集”只重置当前搜索引擎面板：清空结果与断点，并明确清除当前结果语种/国家地区选择，同时恢复检索、采集、链接保存和正文下载设置。全局浏览器/Selenium 配置和磁盘已有文件不会删除。</p>
             <p><b>浏览器与 WebDriver 配置。</b> 默认使用 WebLens 便携版浏览器，系统安装版仅作为明确标记“不推荐”的用户主动备选。一键配置会准备可用浏览器与版本匹配的 Driver；便携版更新功能可检查官方最新稳定版，Chrome 可与精确匹配的 ChromeDriver 一并更新；内置 Edge 可更新匹配的 EdgeDriver，但由于微软没有官方便携 Edge ZIP，WebLens 不会自动替换 Edge 浏览器本体。手动 Browser/Driver 路径会立即验证，开始采集前还会再次预检。</p>
             <p><b>浏览器渲染。</b> 页面渲染等待为应用级设置，默认 5000 ms。</p>
-            <p><b>正文下载。</b> 正文下载与搜索结果采集分离；Requests/Selenium/Mixed 只作用于已经采集的目标页面，Google/百度结果页采集本身始终为浏览器模式。</p>
+            <p><b>来源字段。</b> 自动抓取、普通文件导入、粘贴链接以及手动导入搜索结果 HTML 在下载正文前，均以目标 URL 的主域名填写“来源”；更具体的子域名保留在 Actual domain。正文下载成功后，如果页面元数据可靠识别出 source_name、出版物、站点名称、出版机构或组织名称，则用该名称更新“来源”；否则回退为主域名。</p>
+            <p><b>正文下载。</b> 正文下载与搜索结果采集分离；Requests/Selenium/Mixed 只作用于已经采集的目标页面，Google/百度结果页采集本身始终为浏览器模式。原有基于 <code>content_manifest.jsonl</code> 的正文下载断点续下机制与新的搜索采集断点彼此独立，完整保留。</p>
             """
         self._show_help_dialog(title, subtitle, html)
 
@@ -3783,7 +4225,8 @@ class BFSUWebLensWindow(QMainWindow):
             <p><b>BFSUNLP on GitHub:</b> <a href="{github_url}">{github_url}</a></p>
             <p><b>BFSU LexiScope:</b> LexiScope is an open-source corpus toolkit for corpus construction, metadata management, concordancing, parallel-corpus processing and AI-assisted linguistic analysis. BFSU WebLens is its web/news collection component, supporting corpus-oriented link discovery, review, export and destination-page downloading.</p>
             <p><a href="{lexiscope_url}">BFSU LexiScope project on GitHub</a></p>
-            <p><b>Implementation:</b> PySide6 / Qt desktop interface; application-wide Chrome/Edge and Selenium/WebDriver management; browser-rendered Google/Baidu automatic search collection; browser-independent manual HTML result-page collection; result review/import/export; destination-page content downloading and metadata completion.</p>
+            <p><b>Implementation:</b> PySide6 / Qt desktop interface; application-wide Chrome/Edge and Selenium/WebDriver management; browser-rendered Google/Baidu automatic search collection; fixed eight-term Google OR batching; Google/Baidu interruption-safe previous-page resume checkpoints embedded in result files; state-aware result import; explicit new/continue/reset collection workflow; browser-independent manual HTML result-page collection; explicit user-confirmed pause/resume for human verification without URL forcing; result review/import/export with card-based Google result extraction, redirect-to-final-URL normalization, deterministic URL deduplication and a dedicated Delete all command; destination-page content downloading and metadata completion, including domain-first Source normalization at collection/import and source-name enrichment after successful content download.</p>
+            <p><b>Known issue:</b> Google News searches with a <code>site:</code> domain restriction may trigger Google's own human-verification/redirect mechanism and may return the browser to All/Web after verification. This is an observed Google-side behavior, not a WebLens query-construction error.</p>
             <p><b>Research-use note:</b> Users should respect search-engine and website access rules, applicable law, copyright and research ethics.</p>
             """
         elif lang == "zh_tra":
@@ -3799,7 +4242,8 @@ class BFSUWebLensWindow(QMainWindow):
             <p><b>BFSUNLP GitHub：</b><a href="{github_url}">{github_url}</a></p>
             <p><b>BFSU LexiScope：</b>LexiScope 是一套開源語料庫工具集，面向語料庫建設、元資料管理、語料檢索、平行語料處理與 AI 輔助語言分析。BFSU WebLens 是其中的網頁/新聞採集組件，用於面向語料庫建設的連結發現、結果整理、匯出與目標頁面下載。</p>
             <p><a href="{lexiscope_url}">BFSU LexiScope GitHub 專案首頁</a></p>
-            <p><b>實現：</b>PySide6 / Qt 桌面介面；應用級 Chrome/Edge 與 Selenium/WebDriver 管理；瀏覽器渲染式 Google/百度搜索採集；結果整理與匯入匯出；目標頁面正文下載和元資料補全。</p>
+            <p><b>實現：</b>PySide6 / Qt 桌面介面；應用級 Chrome/Edge 與 Selenium/WebDriver 管理；瀏覽器渲染式 Google/百度搜索採集；Google OR 檢索固定每批最多 8 詞；Google/百度結果檔案內嵌採集斷點並支援從上一頁安全續爬；支援含狀態結果檔案恢復，以及新的「開始／繼續／重置採集」工作流；人工驗證採用用戶明確確認後才恢復的完全暫停模式，不強制改寫瀏覽器地址；結果整理與匯入匯出，採用以結果卡片為單位的 Google 主要連結提取、<code>/goto</code> 最終 URL 解析與確定性 URL 去重，並支援「刪除全部」；目標頁面正文下載和元資料補全，並採用「採集/匯入時主域名、正文下載後可靠來源名稱優先」的來源欄位規則。</p>
+            <p><b>已知問題：</b>Google News 使用 <code>site:</code> 域名限定時，可能觸發 Google 自身的人工驗證/跳轉機制，並在驗證後返回「全部/網頁」。這是已觀察到的 Google 端行為，不是 WebLens 的檢索式構造錯誤。</p>
             <p><b>科研使用：</b>使用者應遵守搜索引擎與目標網站的訪問規則、相關法律、版權規範和科研倫理。</p>
             """
         else:
@@ -3815,7 +4259,8 @@ class BFSUWebLensWindow(QMainWindow):
             <p><b>BFSUNLP GitHub：</b><a href="{github_url}">{github_url}</a></p>
             <p><b>BFSU LexiScope：</b>LexiScope 是一套开源语料库工具集，面向语料库建设、元数据管理、语料检索、平行语料处理与 AI 辅助语言分析。BFSU WebLens 是其中的网页/新闻采集组件，用于面向语料库建设的链接发现、结果整理、导出与目标页面下载。</p>
             <p><a href="{lexiscope_url}">BFSU LexiScope GitHub 项目主页</a></p>
-            <p><b>实现：</b>PySide6 / Qt 桌面界面；应用级 Chrome/Edge 与 Selenium/WebDriver 管理；浏览器渲染式 Google/百度搜索采集；结果整理与导入导出；目标页面正文下载和元数据补全。</p>
+            <p><b>实现：</b>PySide6 / Qt 桌面界面；应用级 Chrome/Edge 与 Selenium/WebDriver 管理；浏览器渲染式 Google/百度搜索采集；Google OR 检索固定每批最多 8 词；Google/百度结果文件内嵌采集断点并支持从上一页安全续爬；支持含状态结果文件恢复，以及新的“开始／继续／重置采集”工作流；结果整理与导入导出，采用以结果卡片为单位的 Google 主要链接提取、<code>/goto</code> 最终 URL 解析与确定性 URL 去重，并支持“删除全部”；目标页面正文下载和元数据补全，并采用“抓取/导入时主域名、正文下载后可靠来源名称优先”的来源字段规则。</p>
+            <p><b>已知问题：</b>Google News 使用 <code>site:</code> 域名限定时，可能触发 Google 自身的人工验证/跳转机制，并在验证后返回“全部/网页”。这是已观察到的 Google 端行为，不是 WebLens 的检索式构造错误。</p>
             <p><b>科研使用：</b>使用者应遵守搜索引擎和目标网站访问规则、相关法律法规、版权规范和科研伦理。</p>
             """
         self._show_help_dialog(title, subtitle, html, identity=identity, about=True)

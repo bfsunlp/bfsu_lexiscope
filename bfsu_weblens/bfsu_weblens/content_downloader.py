@@ -25,6 +25,8 @@ from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 import requests
 from bs4 import BeautifulSoup
 
+from .collector import primary_domain
+
 TRACKING_KEYS = {
     "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
     "utm_name", "utm_cid", "utm_reader", "utm_viz_id", "utm_pubreferrer",
@@ -63,6 +65,27 @@ USER_AGENT_FALLBACK = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/152.0.0.0 Safari/537.36"
 )
+
+
+def detected_source_label(meta: dict[str, Any] | None) -> str:
+    """Return the best human-readable publication/source name in page metadata.
+
+    URL-like values are rejected because Result Preview uses the main domain as
+    the explicit fallback when no publication/site/organization name is known.
+    """
+    data = meta if isinstance(meta, dict) else {}
+    for key in ("source_name", "publication", "site_name", "publisher", "organization"):
+        value = " ".join(str(data.get(key) or "").split()).strip()
+        if not value or len(value) > 160:
+            continue
+        low = value.lower()
+        if low.startswith(("http://", "https://")) or "/" in value or "\\" in value:
+            continue
+        if value.lower() == primary_domain(value).lower() and "." in value and " " not in value:
+            continue
+        return value
+    return ""
+
 
 METADATA_EXCEL_FIELDS = [
     "processed_at", "ok", "url", "final_url", "canonical_url", "domain",
@@ -116,6 +139,11 @@ class ContentResult:
     encoding: str = ""
     title: str = ""
     author: str = ""
+    publisher: str = ""
+    publication: str = ""
+    organization: str = ""
+    site_name: str = ""
+    source_name: str = ""
     published_time: str = ""
     language: str = ""
     extraction_method: str = ""
@@ -305,6 +333,11 @@ def content_result_from_manifest(record: Any, metadata: dict[str, Any]) -> Conte
         encoding=str(metadata.get("encoding") or ""),
         title=str(meta.get("title") or record_title(record) or ""),
         author=str(meta.get("author") or ""),
+        publisher=str(meta.get("publisher") or ""),
+        publication=str(meta.get("publication") or ""),
+        organization=str(meta.get("organization") or ""),
+        site_name=str(meta.get("site_name") or ""),
+        source_name=str(meta.get("source_name") or ""),
         published_time=str(meta.get("published_time") or ""),
         language=str(meta.get("language") or ""),
         extraction_method="resume_checkpoint",
@@ -1344,6 +1377,10 @@ def save_html_content_result(
     wc = word_count(cleaned)
     para_count = len([p for p in cleaned.split("\n\n") if p.strip()])
     score = quality_score(cleaned, meta, status_code)
+    search_record = record_dict(record)
+    source_url = final_url or url
+    search_record["actual_domain"] = domain
+    search_record["source"] = detected_source_label(meta) or primary_domain(source_url)
     metadata = {
         "processed_at": utc_now_iso(),
         "ok": True,
@@ -1358,7 +1395,7 @@ def save_html_content_result(
         "status_code": status_code,
         "content_type": content_type,
         "encoding": encoding or "",
-        "search_record": record_dict(record),
+        "search_record": search_record,
         "metadata": meta,
         "paths": {
             "raw_html": str(raw_html_path),
@@ -1386,6 +1423,11 @@ def save_html_content_result(
         encoding=encoding or "",
         title=meta.get("title", ""),
         author=meta.get("author", ""),
+        publisher=meta.get("publisher", ""),
+        publication=meta.get("publication", ""),
+        organization=meta.get("organization", ""),
+        site_name=meta.get("site_name", ""),
+        source_name=meta.get("source_name", ""),
         published_time=meta.get("published_time", ""),
         language=meta.get("language", ""),
         extraction_method=extraction_method,
